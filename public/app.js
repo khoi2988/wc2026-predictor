@@ -272,9 +272,9 @@ async function renderMatches() {
     return `
       <tr>
         <td>${m.team_a} vs ${m.team_b}<br><span class="small">${fmtTime(m.kickoff_at)}</span></td>
-        <td>1: ${m.odds_home}</td>
-        <td>X: ${m.odds_draw}</td>
-        <td>2: ${m.odds_away}</td>
+        <td>Kèo 1: Đội ${m.team_a} thắng<br><span class="small">Tỷ lệ: ${m.odds_home}</span></td>
+        <td>Kèo X: Hòa<br><span class="small">Tỷ lệ: ${m.odds_draw}</span></td>
+        <td>Kèo 2: Đội ${m.team_b} thắng<br><span class="small">Tỷ lệ: ${m.odds_away}</span></td>
         <td>${result}</td>
         <td>
           ${closed ? '<span class="small">Đã đóng</span>' : `
@@ -302,7 +302,7 @@ async function renderMatches() {
 
   els.matches.innerHTML = `
     <table>
-      <thead><tr><th>Trận</th><th>Kèo 1</th><th>Kèo X</th><th>Kèo 2</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
+      <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
