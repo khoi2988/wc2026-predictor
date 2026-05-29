@@ -5,7 +5,15 @@
   });
 
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+    if (res.status === 403) {
+      throw new Error('Bạn không có quyền thao tác chức năng này.');
+    }
+    throw new Error(data.error || 'Request failed');
+  }
   return data;
 }
 
