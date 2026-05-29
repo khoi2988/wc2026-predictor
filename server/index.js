@@ -544,6 +544,55 @@ function resolveResultFromScore(homeScore, awayScore) {
   return 'DRAW';
 }
 
+function splitStakeInteger(stake) {
+  const first = Math.floor(stake / 2);
+  const second = stake - first;
+  return [first, second];
+}
+
+function settleAsianLeg(scoreDiff, handicapFromHome, sidePick) {
+  const adjusted = scoreDiff + handicapFromHome;
+  if (adjusted > 0) return sidePick === 'HOME' ? 'WIN' : 'LOSE';
+  if (adjusted < 0) return sidePick === 'AWAY' ? 'WIN' : 'LOSE';
+  return 'PUSH';
+}
+
+function settleAsianHandicapBet({ homeScore, awayScore, line, pick, stake, odds }) {
+  const scoreDiff = homeScore - awayScore;
+  const signedHandicap = pick === 'HOME' ? -line : line;
+  const decimalPart = Math.abs(signedHandicap % 1);
+  const isQuarter = Math.abs(decimalPart - 0.25) < 1e-9 || Math.abs(decimalPart - 0.75) < 1e-9;
+
+  const evaluate = (legStake, handicapFromHome) => {
+    const outcome = settleAsianLeg(scoreDiff, handicapFromHome, pick);
+    if (outcome === 'WIN') return { credit: Math.floor(legStake * odds), outcome: 'WIN' };
+    if (outcome === 'PUSH') return { credit: legStake, outcome: 'PUSH' };
+    return { credit: 0, outcome: 'LOSE' };
+  };
+
+  if (!isQuarter) {
+    const leg = evaluate(stake, signedHandicap);
+    const status = leg.outcome === 'WIN' ? 'won' : (leg.outcome === 'PUSH' ? 'refund' : 'lost');
+    return { status, payout: leg.credit };
+  }
+
+  const [stakeA, stakeB] = splitStakeInteger(stake);
+  const direction = signedHandicap >= 0 ? 1 : -1;
+  const legA = evaluate(stakeA, signedHandicap - 0.25 * direction);
+  const legB = evaluate(stakeB, signedHandicap + 0.25 * direction);
+  const payout = legA.credit + legB.credit;
+  const outcomes = [legA.outcome, legB.outcome].sort().join('_');
+
+  let status = 'lost';
+  if (outcomes === 'WIN_WIN') status = 'won';
+  else if (outcomes === 'LOSE_LOSE') status = 'lost';
+  else if (outcomes === 'PUSH_PUSH') status = 'refund';
+  else if (outcomes.includes('WIN') && outcomes.includes('PUSH')) status = 'half_won';
+  else if (outcomes.includes('LOSE') && outcomes.includes('PUSH')) status = 'half_lost';
+
+  return { status, payout };
+}
+
 function sanitizeUser(user) {
   return {
     id: user.id,
@@ -1215,24 +1264,18 @@ app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) =>
       if (!Number.isInteger(match.home_score) || !Number.isInteger(match.away_score) || typeof bet.handicap_line !== 'number') {
         return res.status(400).json({ error: 'Cần nhập tỷ số để chốt kèo chấp.' });
       }
-      const adjustedDiff = (match.home_score - bet.handicap_line) - match.away_score;
-      let outcome = 'DRAW';
-      if (adjustedDiff > 0) outcome = 'HOME';
-      if (adjustedDiff < 0) outcome = 'AWAY';
+      const settled = settleAsianHandicapBet({
+        homeScore: match.home_score,
+        awayScore: match.away_score,
+        line: bet.handicap_line,
+        pick: bet.pick,
+        stake: bet.stake,
+        odds: bet.odds
+      });
       const user = db.users.find((u) => u.id === bet.user_id);
-      if (outcome === bet.pick) {
-        const payout = Math.floor(bet.stake * bet.odds);
-        if (user) user.points += payout;
-        bet.status = 'won';
-        bet.payout = payout;
-      } else if (outcome === 'DRAW') {
-        if (user) user.points += bet.stake;
-        bet.status = 'refund';
-        bet.payout = bet.stake;
-      } else {
-        bet.status = 'lost';
-        bet.payout = 0;
-      }
+      if (user && settled.payout > 0) user.points += settled.payout;
+      bet.status = settled.status;
+      bet.payout = settled.payout;
     } else {
       if (bet.pick === result) {
         const payout = Math.floor(bet.stake * bet.odds);

@@ -107,6 +107,15 @@ function marketLabel(market, line) {
   return '1X2';
 }
 
+function betStatusText(status) {
+  if (status === 'won') return 'Thắng';
+  if (status === 'lost') return 'Thua';
+  if (status === 'refund') return 'Hoàn tiền';
+  if (status === 'half_won') return 'Thắng nửa';
+  if (status === 'half_lost') return 'Thua nửa';
+  return status || '-';
+}
+
 function betPickText(bet) {
   if (bet.market === 'HANDICAP') {
     if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
@@ -394,7 +403,7 @@ async function renderMyBets() {
       <td>${betPickText(b)}</td>
       <td>${b.stake}</td>
       <td>${b.odds}</td>
-      <td>${b.status}</td>
+      <td>${betStatusText(b.status)}</td>
       <td>${b.payout ?? '-'}</td>
       <td>
         ${(!b.result && Date.now() < new Date(b.kickoff_at).getTime() && b.status === 'open')
