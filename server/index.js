@@ -93,9 +93,19 @@ for (const user of db.users) {
   if (typeof user.is_admin !== 'boolean') {
     user.is_admin = false;
   }
+  if (typeof user.can_manage_odds !== 'boolean') {
+    user.can_manage_odds = false;
+  }
+  if (typeof user.can_set_result !== 'boolean') {
+    user.can_set_result = false;
+  }
   if (!Number.isInteger(user.daily_bonus_days_awarded)) {
     user.daily_bonus_days_awarded = 0;
   }
+}
+for (const match of db.matches) {
+  if (!Number.isInteger(match.home_score)) match.home_score = null;
+  if (!Number.isInteger(match.away_score)) match.away_score = null;
 }
 if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) {
   db.specialMarkets = defaultDb().specialMarkets;
@@ -113,6 +123,8 @@ function ensureAdminUser() {
 
   if (existing) {
     existing.is_admin = true;
+    existing.can_manage_odds = true;
+    existing.can_set_result = true;
     existing.password_hash = passwordHash;
     return;
   }
@@ -123,6 +135,8 @@ function ensureAdminUser() {
     password_hash: passwordHash,
     points: STARTING_POINTS,
     is_admin: true,
+    can_manage_odds: true,
+    can_set_result: true,
     created_at: new Date().toISOString()
   });
 }
@@ -152,7 +166,13 @@ async function loadDbRemoteIfEnabled() {
     db = { ...defaultDb(), ...data.state };
     for (const user of db.users) {
       if (typeof user.is_admin !== 'boolean') user.is_admin = false;
+      if (typeof user.can_manage_odds !== 'boolean') user.can_manage_odds = false;
+      if (typeof user.can_set_result !== 'boolean') user.can_set_result = false;
       if (!Number.isInteger(user.daily_bonus_days_awarded)) user.daily_bonus_days_awarded = 0;
+    }
+    for (const match of db.matches) {
+      if (!Number.isInteger(match.home_score)) match.home_score = null;
+      if (!Number.isInteger(match.away_score)) match.away_score = null;
     }
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
@@ -489,12 +509,37 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function hasPermission(req, permissionKey) {
+  if (!req.session.user) return false;
+  const user = db.users.find((u) => u.id === req.session.user.id);
+  if (!user) return false;
+  if (user.is_admin) return true;
+  return Boolean(user[permissionKey]);
+}
+
+function requirePermission(permissionKey) {
+  return (req, res, next) => {
+    if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+    if (!hasPermission(req, permissionKey)) return res.status(403).json({ error: 'Forbidden' });
+    next();
+  };
+}
+
+function resolveResultFromScore(homeScore, awayScore) {
+  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore)) return null;
+  if (homeScore > awayScore) return 'HOME';
+  if (homeScore < awayScore) return 'AWAY';
+  return 'DRAW';
+}
+
 function sanitizeUser(user) {
   return {
     id: user.id,
     username: user.username,
     points: user.points,
     is_admin: Boolean(user.is_admin),
+    can_manage_odds: Boolean(user.can_manage_odds),
+    can_set_result: Boolean(user.can_set_result),
     created_at: user.created_at
   };
 }
@@ -529,6 +574,8 @@ app.post('/api/register', async (req, res) => {
     password_hash: passwordHash,
     points: STARTING_POINTS,
     is_admin: false,
+    can_manage_odds: false,
+    can_set_result: false,
     created_at: new Date().toISOString()
   };
 
@@ -644,9 +691,29 @@ app.post('/api/specials/picks', requireAuth, (req, res) => {
 
 app.get('/api/admin/users', requireAdmin, (req, res) => {
   const users = db.users
-    .map((u) => ({ id: u.id, username: u.username, points: u.points, is_admin: Boolean(u.is_admin) }))
+    .map((u) => ({
+      id: u.id,
+      username: u.username,
+      points: u.points,
+      is_admin: Boolean(u.is_admin),
+      can_manage_odds: Boolean(u.can_manage_odds),
+      can_set_result: Boolean(u.can_set_result)
+    }))
     .sort((a, b) => a.username.localeCompare(b.username));
   res.json({ users });
+});
+
+app.post('/api/admin/users/:id/permissions', requireAdmin, (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ error: 'Invalid user id.' });
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  if (user.is_admin) return res.status(400).json({ error: 'Admin always has full permissions.' });
+
+  user.can_manage_odds = Boolean(req.body.canManageOdds);
+  user.can_set_result = Boolean(req.body.canSetResult);
+  saveDb();
+  res.json({ ok: true, user: sanitizeUser(user) });
 });
 
 app.post('/api/admin/users/:id/points', requireAdmin, (req, res) => {
@@ -929,12 +996,12 @@ app.delete('/api/bets/:id', requireAuth, (req, res) => {
   return res.json({ ok: true, user: sanitizeUser(user) });
 });
 
-app.get('/api/admin/matches', requireAdmin, (req, res) => {
+app.get('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) => {
   const matches = [...db.matches].sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
   res.json({ matches });
 });
 
-app.post('/api/admin/matches', requireAdmin, (req, res) => {
+app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) => {
   const teamA = String(req.body.teamA || '').trim();
   const teamB = String(req.body.teamB || '').trim();
   const kickoffAt = String(req.body.kickoffAt || '').trim();
@@ -958,6 +1025,8 @@ app.post('/api/admin/matches', requireAdmin, (req, res) => {
     odds_home: oddsHome,
     odds_draw: oddsDraw,
     odds_away: oddsAway,
+    home_score: null,
+    away_score: null,
     result: null,
     created_at: new Date().toISOString()
   });
@@ -965,7 +1034,7 @@ app.post('/api/admin/matches', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/admin/matches/:id', requireAdmin, (req, res) => {
+app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, res) => {
   const matchId = Number(req.params.id);
   if (!Number.isInteger(matchId)) return res.status(400).json({ error: 'Invalid match id.' });
   const match = db.matches.find((m) => m.id === matchId);
@@ -1019,12 +1088,27 @@ app.delete('/api/admin/matches/:id', requireAdmin, (req, res) => {
   res.json({ ok: true, refundedBets: relatedBets.length });
 });
 
-app.post('/api/admin/settle', requireAdmin, (req, res) => {
+app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) => {
 
   const matchId = Number(req.body.matchId);
-  const result = String(req.body.result || '');
+  const resultRaw = String(req.body.result || '');
+  const homeScore = req.body.homeScore === undefined || req.body.homeScore === null || req.body.homeScore === ''
+    ? null
+    : Number(req.body.homeScore);
+  const awayScore = req.body.awayScore === undefined || req.body.awayScore === null || req.body.awayScore === ''
+    ? null
+    : Number(req.body.awayScore);
+  const resultFromScore = resolveResultFromScore(homeScore, awayScore);
+  const result = ['HOME', 'DRAW', 'AWAY'].includes(resultRaw) ? resultRaw : resultFromScore;
+
   if (!Number.isInteger(matchId) || !['HOME', 'DRAW', 'AWAY'].includes(result)) {
     return res.status(400).json({ error: 'Invalid payload.' });
+  }
+  if (homeScore !== null && (!Number.isInteger(homeScore) || homeScore < 0)) {
+    return res.status(400).json({ error: 'Invalid homeScore.' });
+  }
+  if (awayScore !== null && (!Number.isInteger(awayScore) || awayScore < 0)) {
+    return res.status(400).json({ error: 'Invalid awayScore.' });
   }
 
   const match = db.matches.find((m) => m.id === matchId);
@@ -1032,6 +1116,10 @@ app.post('/api/admin/settle', requireAdmin, (req, res) => {
   if (match.result) return res.status(400).json({ error: 'Match already settled.' });
 
   match.result = result;
+  if (homeScore !== null && awayScore !== null) {
+    match.home_score = homeScore;
+    match.away_score = awayScore;
+  }
 
   const matchBets = db.bets.filter((b) => b.match_id === matchId);
   for (const bet of matchBets) {
@@ -1049,6 +1137,27 @@ app.post('/api/admin/settle', requireAdmin, (req, res) => {
 
   saveDb();
   res.json({ ok: true, settledBets: matchBets.length });
+});
+
+app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (req, res) => {
+  const matchId = Number(req.params.id);
+  if (!Number.isInteger(matchId)) return res.status(400).json({ error: 'Invalid match id.' });
+  const match = db.matches.find((m) => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (match.result) return res.status(400).json({ error: 'Cannot edit odds of settled match.' });
+
+  const oddsHome = Number(req.body.oddsHome);
+  const oddsDraw = Number(req.body.oddsDraw);
+  const oddsAway = Number(req.body.oddsAway);
+  if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
+    return res.status(400).json({ error: 'Invalid odds.' });
+  }
+
+  match.odds_home = oddsHome;
+  match.odds_draw = oddsDraw;
+  match.odds_away = oddsAway;
+  saveDb();
+  res.json({ ok: true });
 });
 
 app.get('/api/admin/sync-status', requireAdmin, (req, res) => {

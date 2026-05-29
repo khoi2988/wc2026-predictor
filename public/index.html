@@ -67,21 +67,23 @@
       </div>
 
       <div id="adminPanel" class="card hidden">
-        <h2>Admin Thủ Công</h2>
-        <h3>Điểm cộng mỗi ngày</h3>
-        <div class="row">
-          <label><input id="dailyBonusEnabled" type="checkbox" /> Bật cộng điểm tự động</label>
-          <input id="dailyBonusStartDate" type="date" />
-          <input id="dailyBonusPoints" type="number" step="1" min="1" placeholder="Điểm mỗi ngày" />
-          <button id="btnSaveDailyBonus">Lưu cấu hình</button>
+        <h2>Bảng vận hành (Admin/Operator)</h2>
+        <div id="adminOnlyDailyBonus">
+          <h3>Điểm cộng mỗi ngày</h3>
+          <div class="row">
+            <label><input id="dailyBonusEnabled" type="checkbox" /> Bật cộng điểm tự động</label>
+            <input id="dailyBonusStartDate" type="date" />
+            <input id="dailyBonusPoints" type="number" step="1" min="1" placeholder="Điểm mỗi ngày" />
+            <button id="btnSaveDailyBonus">Lưu cấu hình</button>
+          </div>
+          <div id="dailyBonusInfo" class="small"></div>
         </div>
-        <div id="dailyBonusInfo" class="small"></div>
 
         <div class="row">
           <button id="btnAdminLoad" class="alt">Tải danh sách trận</button>
           <button id="btnAdminLoadUsers" class="alt">Tải danh sách user</button>
         </div>
-        <div class="row">
+        <div id="matchCreateRow" class="row">
           <input id="newTeamA" placeholder="Team A" />
           <input id="newTeamB" placeholder="Team B" />
           <input id="newKickoff" type="datetime-local" />
@@ -91,15 +93,17 @@
           <button id="btnAddMatch">Thêm trận</button>
         </div>
         <div id="adminMatches"></div>
-        <h3>Chốt dự đoán vui</h3>
-        <div id="adminSpecials"></div>
-        <h3>Quản lý điểm người chơi</h3>
-        <div class="row">
-          <input id="bulkPointsDelta" type="number" step="1" value="100" style="width:140px" placeholder="Điểm cộng/trừ" />
-          <button id="btnBulkAddPoints">Cộng điểm cho toàn bộ user</button>
-          <button id="btnBulkSubtractPoints">Trừ điểm toàn bộ user</button>
+        <div id="adminOnlyExtra">
+          <h3>Chốt dự đoán vui</h3>
+          <div id="adminSpecials"></div>
+          <h3>Quản lý điểm người chơi</h3>
+          <div class="row">
+            <input id="bulkPointsDelta" type="number" step="1" value="100" style="width:140px" placeholder="Điểm cộng/trừ" />
+            <button id="btnBulkAddPoints">Cộng điểm cho toàn bộ user</button>
+            <button id="btnBulkSubtractPoints">Trừ điểm toàn bộ user</button>
+          </div>
+          <div id="adminUsers"></div>
         </div>
-        <div id="adminUsers"></div>
       </div>
 
       <div class="card">

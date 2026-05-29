@@ -24,12 +24,16 @@ const els = {
   health: document.getElementById('health'),
   adminMatches: document.getElementById('adminMatches'),
   adminPanel: document.getElementById('adminPanel'),
+  adminOnlyDailyBonus: document.getElementById('adminOnlyDailyBonus'),
+  adminOnlyExtra: document.getElementById('adminOnlyExtra'),
+  matchCreateRow: document.getElementById('matchCreateRow'),
   adminUsers: document.getElementById('adminUsers'),
   adminSpecials: document.getElementById('adminSpecials'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
   changePasswordForm: document.getElementById('changePasswordForm')
 };
+let currentUser = null;
 
 function setMessage(text, cls = '') {
   els.msg.className = `small ${cls}`;
@@ -78,6 +82,7 @@ async function refresh() {
   const user = meRes.user;
 
   if (!user) {
+    currentUser = null;
     els.auth.classList.remove('hidden');
     els.main.classList.add('hidden');
     els.adminPanel.classList.add('hidden');
@@ -93,9 +98,17 @@ async function refresh() {
 
   els.auth.classList.add('hidden');
   els.main.classList.remove('hidden');
-  if (user.is_admin) {
+  const canOperate = user.is_admin || user.can_manage_odds || user.can_set_result;
+  currentUser = user;
+  if (canOperate) {
     els.adminPanel.classList.remove('hidden');
-    await renderDailyBonusConfig();
+    els.adminOnlyDailyBonus.classList.toggle('hidden', !user.is_admin);
+    els.adminOnlyExtra.classList.toggle('hidden', !user.is_admin);
+    els.matchCreateRow.classList.toggle('hidden', !(user.is_admin || user.can_manage_odds));
+    document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !user.is_admin);
+    if (user.is_admin) {
+      await renderDailyBonusConfig();
+    }
   } else {
     els.adminPanel.classList.add('hidden');
   }
@@ -119,6 +132,9 @@ async function renderDailyBonusConfig() {
 
 async function renderAdminMatches() {
   try {
+    const canManageOdds = Boolean(currentUser && (currentUser.is_admin || currentUser.can_manage_odds));
+    const canSetResult = Boolean(currentUser && (currentUser.is_admin || currentUser.can_set_result));
+    const canDelete = Boolean(currentUser && currentUser.is_admin);
     const data = await adminApi('/api/admin/matches');
     const rows = data.matches.map((m) => `
       <tr>
@@ -126,15 +142,25 @@ async function renderAdminMatches() {
         <td>${m.team_a}</td>
         <td>${m.team_b}</td>
         <td>${fmtTime(m.kickoff_at)}</td>
-        <td>${m.odds_home}</td>
-        <td>${m.odds_draw}</td>
-        <td>${m.odds_away}</td>
-        <td>${m.result || '-'}</td>
         <td>
-          <button onclick="settleMatch(${m.id},'HOME')">Chốt ${m.team_a}</button>
-          <button onclick="settleMatch(${m.id},'DRAW')">Chốt Hòa</button>
-          <button onclick="settleMatch(${m.id},'AWAY')">Chốt ${m.team_b}</button>
-          <button onclick="deleteMatch(${m.id})">Xóa</button>
+          <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_home}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+        </td>
+        <td>
+          <input id="odds-draw-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_draw}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+        </td>
+        <td>
+          <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_away}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+        </td>
+        <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
+        <td>
+          ${canManageOdds ? `<button onclick="updateOdds(${m.id})">Lưu kèo</button>` : ''}
+          ${canSetResult ? `<button onclick="settleMatch(${m.id},'HOME')">Chốt ${m.team_a}</button>` : ''}
+          ${canSetResult ? `<button onclick="settleMatch(${m.id},'DRAW')">Chốt Hòa</button>` : ''}
+          ${canSetResult ? `<button onclick="settleMatch(${m.id},'AWAY')">Chốt ${m.team_b}</button>` : ''}
+          ${canSetResult ? `<input id="score-home-${m.id}" type="number" min="0" placeholder="${m.team_a}" style="width:75px" />` : ''}
+          ${canSetResult ? `<input id="score-away-${m.id}" type="number" min="0" placeholder="${m.team_b}" style="width:75px" />` : ''}
+          ${canSetResult ? `<button onclick="settleByScore(${m.id})">Chốt tỷ số</button>` : ''}
+          ${canDelete ? `<button onclick="deleteMatch(${m.id})">Xóa</button>` : ''}
         </td>
       </tr>
     `).join('');
@@ -153,6 +179,13 @@ async function renderAdminUsers() {
         <td>${u.username}${u.is_admin ? ' (admin)' : ''}</td>
         <td>${u.points}</td>
         <td>
+          ${u.is_admin ? '<span class="small">Full</span>' : `
+            <label><input type="checkbox" id="perm-odds-${u.id}" ${u.can_manage_odds ? 'checked' : ''} /> Set kèo</label><br>
+            <label><input type="checkbox" id="perm-result-${u.id}" ${u.can_set_result ? 'checked' : ''} /> Set tỷ số/KQ</label><br>
+            <button onclick="savePermissions(${u.id})">Lưu quyền</button>
+          `}
+        </td>
+        <td>
           <input id="delta-${u.id}" type="number" step="1" value="100" style="width:90px" />
           <button onclick="adjustPoints(${u.id}, 1)">Cộng</button>
           <button onclick="adjustPoints(${u.id}, -1)">Trừ</button>
@@ -161,7 +194,7 @@ async function renderAdminUsers() {
         </td>
       </tr>
     `).join('');
-    els.adminUsers.innerHTML = `<table><thead><tr><th>ID</th><th>User</th><th>Điểm</th><th>Điều chỉnh</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminUsers.innerHTML = `<table><thead><tr><th>ID</th><th>User</th><th>Điểm</th><th>Phân quyền</th><th>Điều chỉnh</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
     els.adminUsers.innerHTML = `<p class="small error">${e.message}</p>`;
   }
@@ -460,6 +493,37 @@ window.settleMatch = async function (matchId, result) {
   }
 };
 
+window.settleByScore = async function (matchId) {
+  try {
+    const homeScore = Number(document.getElementById(`score-home-${matchId}`).value);
+    const awayScore = Number(document.getElementById(`score-away-${matchId}`).value);
+    await adminApi('/api/admin/settle', {
+      method: 'POST',
+      body: JSON.stringify({ matchId, homeScore, awayScore })
+    });
+    setMessage('Chốt tỷ số thành công', 'success');
+    await Promise.all([refresh(), renderAdminMatches()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.updateOdds = async function (matchId) {
+  try {
+    const oddsHome = Number(document.getElementById(`odds-home-${matchId}`).value);
+    const oddsDraw = Number(document.getElementById(`odds-draw-${matchId}`).value);
+    const oddsAway = Number(document.getElementById(`odds-away-${matchId}`).value);
+    await adminApi(`/api/admin/matches/${matchId}/odds`, {
+      method: 'PUT',
+      body: JSON.stringify({ oddsHome, oddsDraw, oddsAway })
+    });
+    setMessage('Cập nhật kèo thành công', 'success');
+    await Promise.all([refresh(), renderAdminMatches()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
 window.deleteMatch = async function (matchId) {
   try {
     const result = await adminApi(`/api/admin/matches/${matchId}`, { method: 'DELETE' });
@@ -484,6 +548,21 @@ window.adjustPoints = async function (userId, sign) {
     });
     setMessage('Cập nhật điểm thành công', 'success');
     await Promise.all([refresh(), renderAdminUsers()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.savePermissions = async function (userId) {
+  try {
+    const canManageOdds = document.getElementById(`perm-odds-${userId}`)?.checked;
+    const canSetResult = document.getElementById(`perm-result-${userId}`)?.checked;
+    await adminApi(`/api/admin/users/${userId}/permissions`, {
+      method: 'POST',
+      body: JSON.stringify({ canManageOdds, canSetResult })
+    });
+    setMessage('Cập nhật quyền thành công', 'success');
+    await renderAdminUsers();
   } catch (e) {
     setMessage(e.message, 'error');
   }
