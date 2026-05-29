@@ -324,13 +324,22 @@ async function renderMatches() {
     const result = m.result ? `KQ: ${pickLabel(m.result)}` : 'Chưa có kết quả';
     const closed = Date.now() >= new Date(m.kickoff_at).getTime() || m.result;
     const mode = String(m.bet_mode || '1X2');
+    const odds1Cell = mode === '1X2'
+      ? `Kèo 1: Đội ${m.team_a} thắng<br><span class="small">Tỷ lệ: ${m.odds_home}</span>`
+      : '<span class="small">-</span>';
+    const oddsXCell = mode === '1X2'
+      ? `Kèo X: Hòa<br><span class="small">Tỷ lệ: ${m.odds_draw}</span>`
+      : '<span class="small">-</span>';
+    const odds2Cell = mode === '1X2'
+      ? `Kèo 2: Đội ${m.team_b} thắng<br><span class="small">Tỷ lệ: ${m.odds_away}</span>`
+      : '<span class="small">-</span>';
 
     return `
       <tr>
         <td>${m.team_a} vs ${m.team_b}<br><span class="small">${fmtTime(m.kickoff_at)}</span></td>
-        <td>Kèo 1: Đội ${m.team_a} thắng<br><span class="small">Tỷ lệ: ${m.odds_home}</span></td>
-        <td>Kèo X: Hòa<br><span class="small">Tỷ lệ: ${m.odds_draw}</span></td>
-        <td>Kèo 2: Đội ${m.team_b} thắng<br><span class="small">Tỷ lệ: ${m.odds_away}</span></td>
+        <td>${odds1Cell}</td>
+        <td>${oddsXCell}</td>
+        <td>${odds2Cell}</td>
         <td>${result}</td>
         <td>
           ${closed ? '<span class="small">Đã đóng</span>' : `
@@ -565,15 +574,29 @@ document.getElementById('btnAddMatch').onclick = async () => {
     const oddsHandicapHomeRaw = document.getElementById('newOddsHandicapHome').value;
     const oddsHandicapAwayRaw = document.getElementById('newOddsHandicapAway').value;
     const kickoffAt = new Date(kickoffLocal).toISOString();
+    const handicapLine = handicapLineRaw === '' ? null : Number(handicapLineRaw);
+    const oddsHandicapHome = oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw);
+    const oddsHandicapAway = oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw);
+
+    if (betMode === 'HANDICAP') {
+      if (handicapLine === null || Number.isNaN(handicapLine) || handicapLine < 0) {
+        setMessage('Kèo chấp không hợp lệ. Ví dụ: 0.5', 'error');
+        return;
+      }
+      if (oddsHandicapHome === null || oddsHandicapAway === null || oddsHandicapHome <= 1 || oddsHandicapAway <= 1) {
+        setMessage('Odds kèo chấp phải lớn hơn 1. Ví dụ: 1.95 và 1.95', 'error');
+        return;
+      }
+    }
 
     await adminApi('/api/admin/matches', {
       method: 'POST',
       body: JSON.stringify({
         teamA, teamB, kickoffAt, oddsHome, oddsDraw, oddsAway,
         betMode,
-        handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
-        oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
-        oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
+        handicapLine,
+        oddsHandicapHome,
+        oddsHandicapAway
       })
     });
     setMessage('Thêm trận thành công', 'success');
