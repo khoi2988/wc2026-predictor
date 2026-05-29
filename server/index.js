@@ -3,6 +3,7 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const { createClient } = require('@supabase/supabase-js');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -23,9 +24,14 @@ const APIFOOTBALL_KEY = process.env.APIFOOTBALL_KEY || '';
 const APIFOOTBALL_LEAGUE = process.env.APIFOOTBALL_LEAGUE || '';
 const APIFOOTBALL_SEASON = process.env.APIFOOTBALL_SEASON || '';
 const APIFOOTBALL_BOOKMAKER = process.env.APIFOOTBALL_BOOKMAKER || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const REMOTE_STATE_ID = 1;
 
 const app = express();
 const dbPath = path.join(__dirname, '..', 'data.json');
+const useRemoteDb = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const supabase = useRemoteDb ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
 
 function seedMatches() {
   return [
@@ -121,11 +127,48 @@ function ensureAdminUser() {
   });
 }
 
-ensureAdminUser();
-saveDb();
-
 function saveDb() {
   fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+  if (useRemoteDb) {
+    persistDbRemote().catch((err) => {
+      console.error(`[remote-db] save failed: ${err.message}`);
+    });
+  }
+}
+
+async function loadDbRemoteIfEnabled() {
+  if (!useRemoteDb) return;
+  const { data, error } = await supabase
+    .from('app_state')
+    .select('state')
+    .eq('id', REMOTE_STATE_ID)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (data?.state && typeof data.state === 'object') {
+    db = { ...defaultDb(), ...data.state };
+    for (const user of db.users) {
+      if (typeof user.is_admin !== 'boolean') user.is_admin = false;
+      if (!Number.isInteger(user.daily_bonus_days_awarded)) user.daily_bonus_days_awarded = 0;
+    }
+    if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
+    if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
+    if (!db.dailyBonus || typeof db.dailyBonus !== 'object') db.dailyBonus = defaultDb().dailyBonus;
+    fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
+    return;
+  }
+
+  await persistDbRemote();
+}
+
+async function persistDbRemote() {
+  if (!useRemoteDb) return;
+  const payload = { id: REMOTE_STATE_ID, state: db, updated_at: new Date().toISOString() };
+  const { error } = await supabase.from('app_state').upsert(payload, { onConflict: 'id' });
+  if (error) throw new Error(error.message);
 }
 
 function parseLocalDateToUtc(dateStr) {
@@ -1026,22 +1069,39 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-app.listen(PORT, HOST, () => {
-  console.log(`Server running on http://${HOST}:${PORT}`);
-});
-
-const autoSyncEnabled = ODDS_PROVIDER === 'api-football' ? Boolean(APIFOOTBALL_KEY || ODDS_API_KEY) : Boolean(ODDS_API_KEY);
-if (autoSyncEnabled) {
-  setInterval(async () => {
-    try {
-      const summary = await syncOddsFromProvider();
-      console.log(`[odds-sync] inserted=${summary.inserted} updated=${summary.updated} totalEvents=${summary.totalEvents}`);
-    } catch (err) {
-      db.lastSyncAt = new Date().toISOString();
-      db.lastSyncError = err.message;
-      saveDb();
-      console.error(`[odds-sync] failed: ${err.message}`);
+async function startServer() {
+  try {
+    await loadDbRemoteIfEnabled();
+    ensureAdminUser();
+    saveDb();
+    if (useRemoteDb) {
+      console.log('[remote-db] Supabase persistence enabled.');
+    } else {
+      console.log('[remote-db] Using local data.json (fallback).');
     }
-  }, ODDS_SYNC_INTERVAL_MS);
+  } catch (err) {
+    console.error(`[remote-db] init failed, fallback to local file: ${err.message}`);
+  }
+
+  app.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
+  });
+
+  const autoSyncEnabled = ODDS_PROVIDER === 'api-football' ? Boolean(APIFOOTBALL_KEY || ODDS_API_KEY) : Boolean(ODDS_API_KEY);
+  if (autoSyncEnabled) {
+    setInterval(async () => {
+      try {
+        const summary = await syncOddsFromProvider();
+        console.log(`[odds-sync] inserted=${summary.inserted} updated=${summary.updated} totalEvents=${summary.totalEvents}`);
+      } catch (err) {
+        db.lastSyncAt = new Date().toISOString();
+        db.lastSyncError = err.message;
+        saveDb();
+        console.error(`[odds-sync] failed: ${err.message}`);
+      }
+    }, ODDS_SYNC_INTERVAL_MS);
+  }
 }
+
+startServer();
 

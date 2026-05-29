@@ -78,3 +78,26 @@ Neu `ODDS_PROVIDER=api-football` thi server dung endpoint `https://v3.football.a
 - Odds seed mau van co san de test. Khi bat API, du lieu moi se duoc upsert vao file `data.json`.
 - Nen dat `ADMIN_PASSWORD` manh truoc khi mo LAN.
 
+## Online DB (Supabase Free)
+De du lieu khong phu thuoc may local/instance Render, dung Supabase Postgres lam remote state.
+
+1. Tao project Supabase free.
+2. Vao SQL Editor, chay:
+   ```sql
+   create table if not exists public.app_state (
+     id bigint primary key,
+     state jsonb not null,
+     updated_at timestamptz not null default now()
+   );
+   ```
+3. Lay 2 gia tri:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY` (Project Settings -> API)
+4. Tren Render, them env:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+5. Redeploy.
+
+Neu co 2 env tren, app se luu/doi du lieu tren Supabase.
+Neu thieu env, app fallback ve `data.json`.
+
