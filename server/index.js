@@ -467,6 +467,16 @@ app.use(
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    status: 'healthy',
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    storage: useRemoteDb ? 'supabase' : 'local-file'
+  });
+});
+
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   next();

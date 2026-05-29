@@ -21,6 +21,7 @@ const els = {
   myBets: document.getElementById('myBets'),
   specialMarkets: document.getElementById('specialMarkets'),
   mySpecialPicks: document.getElementById('mySpecialPicks'),
+  health: document.getElementById('health'),
   adminMatches: document.getElementById('adminMatches'),
   adminPanel: document.getElementById('adminPanel'),
   adminUsers: document.getElementById('adminUsers'),
@@ -55,6 +56,19 @@ function pickLabel(pick) {
   return 'Đội B thắng';
 }
 
+async function renderHealth() {
+  try {
+    const data = await api('/api/health');
+    const updated = new Date(data.timestamp).toLocaleTimeString('vi-VN');
+    const storage = data.storage === 'supabase' ? 'Supabase Online' : 'Local file';
+    els.health.className = 'small health-line health-ok';
+    els.health.textContent = `Trạng thái hệ thống: OK | Lưu dữ liệu: ${storage} | Check lúc ${updated}`;
+  } catch (e) {
+    els.health.className = 'small health-line health-bad';
+    els.health.textContent = `Trạng thái hệ thống: Lỗi kiểm tra health (${e.message})`;
+  }
+}
+
 async function adminApi(url, options = {}) {
   return api(url, options);
 }
@@ -72,6 +86,7 @@ async function refresh() {
     els.currentUserLabel.textContent = '';
     els.changePasswordForm.classList.add('hidden');
     els.me.innerHTML = '<span class="badge">Chưa đăng nhập</span>';
+    await renderHealth();
     showLoginForm();
     return;
   }
@@ -87,7 +102,7 @@ async function refresh() {
   els.currentUserLabel.textContent = `Tài khoản: ${user.username}`;
   els.me.innerHTML = `<span class="badge">${user.username}</span> <span class="badge">${user.points} points</span>`;
 
-  await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials()]);
+  await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials(), renderHealth()]);
 }
 
 async function renderDailyBonusConfig() {
@@ -517,3 +532,6 @@ window.settleSpecial = async function (marketKey) {
 };
 
 refresh().catch((e) => setMessage(e.message, 'error'));
+setInterval(() => {
+  renderHealth().catch(() => {});
+}, 30000);
