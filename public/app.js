@@ -60,6 +60,21 @@ function pickLabel(pick) {
   return 'Đội B thắng';
 }
 
+function marketLabel(market, line) {
+  if (market === 'HANDICAP') return `Kèo chấp (${line ?? 0})`;
+  return '1X2';
+}
+
+function betPickText(bet) {
+  if (bet.market === 'HANDICAP') {
+    if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
+    if (bet.pick === 'AWAY') return `${bet.team_b} +${bet.handicap_line ?? 0}`;
+  }
+  if (bet.pick === 'HOME') return `${bet.team_a} thắng`;
+  if (bet.pick === 'DRAW') return 'Hòa';
+  return `${bet.team_b} thắng`;
+}
+
 async function renderHealth() {
   try {
     const data = await api('/api/health');
@@ -151,6 +166,11 @@ async function renderAdminMatches() {
         <td>
           <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_away}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
         </td>
+        <td>
+          <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.handicap_line ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_handicap_home ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_handicap_away ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+        </td>
         <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
         <td>
           ${canManageOdds ? `<button onclick="updateOdds(${m.id})">Lưu kèo</button>` : ''}
@@ -164,7 +184,7 @@ async function renderAdminMatches() {
         </td>
       </tr>
     `).join('');
-    els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>1</th><th>X</th><th>2</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
     els.adminMatches.innerHTML = `<p class="small error">${e.message}</p>`;
   }
@@ -264,7 +284,16 @@ async function renderMatches() {
               <option value="AWAY">${m.team_b}</option>
             </select>
             <input id="stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
-            <button onclick="placeBet(${m.id})">Đặt</button>
+            <button onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
+            ${typeof m.handicap_line === 'number' ? `
+              <br><span class="small">Kèo chấp: ${m.team_a} -${m.handicap_line} (${m.odds_handicap_home}) | ${m.team_b} +${m.handicap_line} (${m.odds_handicap_away})</span><br>
+              <select id="hcp-pick-${m.id}">
+                <option value="HOME">${m.team_a} -${m.handicap_line}</option>
+                <option value="AWAY">${m.team_b} +${m.handicap_line}</option>
+              </select>
+              <input id="hcp-stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
+              <button onclick="placeBet(${m.id}, 'HANDICAP')">Đặt kèo chấp</button>
+            ` : ''}
           `}
         </td>
       </tr>
@@ -293,7 +322,8 @@ async function renderMyBets() {
   const rows = data.bets.map((b) => `
     <tr>
       <td>${b.team_a} vs ${b.team_b}</td>
-      <td>${pickLabel(b.pick)}</td>
+      <td>${marketLabel(b.market, b.handicap_line)}</td>
+      <td>${betPickText(b)}</td>
       <td>${b.stake}</td>
       <td>${b.odds}</td>
       <td>${b.status}</td>
@@ -306,16 +336,20 @@ async function renderMyBets() {
     </tr>
   `).join('');
 
-  els.myBets.innerHTML = `<table><thead><tr><th>Trận</th><th>Chọn</th><th>Cược</th><th>Tỷ lệ</th><th>KQ</th><th>Thưởng</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.myBets.innerHTML = `<table><thead><tr><th>Trận</th><th>Thể thức</th><th>Chọn</th><th>Cược</th><th>Tỷ lệ</th><th>KQ</th><th>Thưởng</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-window.placeBet = async function (matchId) {
+window.placeBet = async function (matchId, market = '1X2') {
   try {
-    const pick = document.getElementById(`pick-${matchId}`).value;
-    const stake = Number(document.getElementById(`stake-${matchId}`).value);
+    const pick = market === 'HANDICAP'
+      ? document.getElementById(`hcp-pick-${matchId}`).value
+      : document.getElementById(`pick-${matchId}`).value;
+    const stake = Number(market === 'HANDICAP'
+      ? document.getElementById(`hcp-stake-${matchId}`).value
+      : document.getElementById(`stake-${matchId}`).value);
     await api('/api/bets', {
       method: 'POST',
-      body: JSON.stringify({ matchId, pick, stake })
+      body: JSON.stringify({ matchId, market, pick, stake })
     });
     setMessage('Đặt cược thành công', 'success');
     await refresh();
@@ -467,11 +501,19 @@ document.getElementById('btnAddMatch').onclick = async () => {
     const oddsHome = Number(document.getElementById('newOddsHome').value);
     const oddsDraw = Number(document.getElementById('newOddsDraw').value);
     const oddsAway = Number(document.getElementById('newOddsAway').value);
+    const handicapLineRaw = document.getElementById('newHandicapLine').value;
+    const oddsHandicapHomeRaw = document.getElementById('newOddsHandicapHome').value;
+    const oddsHandicapAwayRaw = document.getElementById('newOddsHandicapAway').value;
     const kickoffAt = new Date(kickoffLocal).toISOString();
 
     await adminApi('/api/admin/matches', {
       method: 'POST',
-      body: JSON.stringify({ teamA, teamB, kickoffAt, oddsHome, oddsDraw, oddsAway })
+      body: JSON.stringify({
+        teamA, teamB, kickoffAt, oddsHome, oddsDraw, oddsAway,
+        handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
+        oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
+        oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
+      })
     });
     setMessage('Thêm trận thành công', 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
@@ -513,9 +555,17 @@ window.updateOdds = async function (matchId) {
     const oddsHome = Number(document.getElementById(`odds-home-${matchId}`).value);
     const oddsDraw = Number(document.getElementById(`odds-draw-${matchId}`).value);
     const oddsAway = Number(document.getElementById(`odds-away-${matchId}`).value);
+    const handicapLineRaw = document.getElementById(`hcp-line-${matchId}`).value;
+    const oddsHandicapHomeRaw = document.getElementById(`hcp-home-${matchId}`).value;
+    const oddsHandicapAwayRaw = document.getElementById(`hcp-away-${matchId}`).value;
     await adminApi(`/api/admin/matches/${matchId}/odds`, {
       method: 'PUT',
-      body: JSON.stringify({ oddsHome, oddsDraw, oddsAway })
+      body: JSON.stringify({
+        oddsHome, oddsDraw, oddsAway,
+        handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
+        oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
+        oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
+      })
     });
     setMessage('Cập nhật kèo thành công', 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
