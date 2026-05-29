@@ -35,10 +35,10 @@ const supabase = useRemoteDb ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_
 
 function seedMatches() {
   return [
-    { id: 1, team_a: 'Brazil', team_b: 'France', kickoff_at: '2026-06-20T19:00:00Z', odds_home: 2.2, odds_draw: 3.2, odds_away: 3.1, handicap_line: 0.5, odds_handicap_home: 1.9, odds_handicap_away: 1.9, result: null, created_at: new Date().toISOString() },
-    { id: 2, team_a: 'Argentina', team_b: 'Germany', kickoff_at: '2026-06-21T19:00:00Z', odds_home: 2.5, odds_draw: 3.1, odds_away: 2.8, handicap_line: 0.5, odds_handicap_home: 1.9, odds_handicap_away: 1.9, result: null, created_at: new Date().toISOString() },
-    { id: 3, team_a: 'Spain', team_b: 'England', kickoff_at: '2026-06-22T19:00:00Z', odds_home: 2.7, odds_draw: 3.0, odds_away: 2.6, handicap_line: 0.5, odds_handicap_home: 1.9, odds_handicap_away: 1.9, result: null, created_at: new Date().toISOString() },
-    { id: 4, team_a: 'Portugal', team_b: 'Netherlands', kickoff_at: '2026-06-23T19:00:00Z', odds_home: 2.8, odds_draw: 3.2, odds_away: 2.5, handicap_line: 0.5, odds_handicap_home: 1.9, odds_handicap_away: 1.9, result: null, created_at: new Date().toISOString() }
+    { id: 1, team_a: 'Brazil', team_b: 'France', kickoff_at: '2026-06-20T19:00:00Z', bet_mode: '1X2', odds_home: 2.2, odds_draw: 3.2, odds_away: 3.1, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
+    { id: 2, team_a: 'Argentina', team_b: 'Germany', kickoff_at: '2026-06-21T19:00:00Z', bet_mode: '1X2', odds_home: 2.5, odds_draw: 3.1, odds_away: 2.8, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
+    { id: 3, team_a: 'Spain', team_b: 'England', kickoff_at: '2026-06-22T19:00:00Z', bet_mode: '1X2', odds_home: 2.7, odds_draw: 3.0, odds_away: 2.6, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
+    { id: 4, team_a: 'Portugal', team_b: 'Netherlands', kickoff_at: '2026-06-23T19:00:00Z', bet_mode: '1X2', odds_home: 2.8, odds_draw: 3.2, odds_away: 2.5, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() }
   ];
 }
 
@@ -106,6 +106,9 @@ for (const user of db.users) {
 for (const match of db.matches) {
   if (!Number.isInteger(match.home_score)) match.home_score = null;
   if (!Number.isInteger(match.away_score)) match.away_score = null;
+  if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
+    match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
+  }
   if (typeof match.handicap_line !== 'number') match.handicap_line = null;
   if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
   if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
@@ -176,6 +179,9 @@ async function loadDbRemoteIfEnabled() {
     for (const match of db.matches) {
       if (!Number.isInteger(match.home_score)) match.home_score = null;
       if (!Number.isInteger(match.away_score)) match.away_score = null;
+      if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
+        match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
+      }
       if (typeof match.handicap_line !== 'number') match.handicap_line = null;
       if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
       if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
@@ -945,12 +951,15 @@ app.post('/api/bets', requireAuth, (req, res) => {
 
   const match = db.matches.find((m) => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (market !== String(match.bet_mode || '1X2')) {
+    return res.status(400).json({ error: 'Trận này chỉ cho phép một thể thức cược đã cấu hình.' });
+  }
   if (match.result) return res.status(400).json({ error: 'Betting closed for this match.' });
   if (Date.now() >= new Date(match.kickoff_at).getTime()) {
     return res.status(400).json({ error: 'Betting closed (kickoff passed).' });
   }
 
-  const existed = db.bets.some((b) => b.user_id === req.session.user.id && b.match_id === matchId && String(b.market || '1X2') === market);
+  const existed = db.bets.some((b) => b.user_id === req.session.user.id && b.match_id === matchId);
   if (existed) return res.status(409).json({ error: 'You already bet on this match.' });
 
   const user = db.users.find((u) => u.id === req.session.user.id);
@@ -1033,6 +1042,7 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
   const oddsAway = Number(req.body.oddsAway);
+  const betMode = String(req.body.betMode || '1X2').toUpperCase();
   const handicapLineRaw = req.body.handicapLine;
   const handicapLine = handicapLineRaw === undefined || handicapLineRaw === null || handicapLineRaw === '' ? null : Number(handicapLineRaw);
   const oddsHandicapHomeRaw = req.body.oddsHandicapHome;
@@ -1041,11 +1051,14 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
   const oddsHandicapAway = oddsHandicapAwayRaw === undefined || oddsHandicapAwayRaw === null || oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw);
 
   if (!teamA || !teamB || !kickoffAt) return res.status(400).json({ error: 'Missing team or kickoff.' });
-  if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
-    return res.status(400).json({ error: 'Invalid odds.' });
+  if (!['1X2', 'HANDICAP'].includes(betMode)) {
+    return res.status(400).json({ error: 'Invalid bet mode.' });
   }
-  if (handicapLine !== null) {
-    if (Number.isNaN(handicapLine) || handicapLine < 0) return res.status(400).json({ error: 'Invalid handicap line.' });
+  if (betMode === '1X2' && [oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
+    return res.status(400).json({ error: 'Invalid 1X2 odds.' });
+  }
+  if (betMode === 'HANDICAP') {
+    if (handicapLine === null || Number.isNaN(handicapLine) || handicapLine < 0) return res.status(400).json({ error: 'Invalid handicap line.' });
     if (oddsHandicapHome === null || oddsHandicapAway === null) return res.status(400).json({ error: 'Missing handicap odds.' });
     if ([oddsHandicapHome, oddsHandicapAway].some((x) => Number.isNaN(x) || x <= 1)) {
       return res.status(400).json({ error: 'Invalid handicap odds.' });
@@ -1060,12 +1073,13 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
     team_a: teamA,
     team_b: teamB,
     kickoff_at: parsed.toISOString(),
+    bet_mode: betMode,
     odds_home: oddsHome,
     odds_draw: oddsDraw,
     odds_away: oddsAway,
-    handicap_line: handicapLine,
-    odds_handicap_home: handicapLine !== null ? oddsHandicapHome : null,
-    odds_handicap_away: handicapLine !== null ? oddsHandicapAway : null,
+    handicap_line: betMode === 'HANDICAP' ? handicapLine : null,
+    odds_handicap_home: betMode === 'HANDICAP' ? oddsHandicapHome : null,
+    odds_handicap_away: betMode === 'HANDICAP' ? oddsHandicapAway : null,
     home_score: null,
     away_score: null,
     result: null,
@@ -1247,31 +1261,34 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
   const oddsAway = Number(req.body.oddsAway);
-  if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
-    return res.status(400).json({ error: 'Invalid odds.' });
-  }
+  const betMode = String(req.body.betMode || match.bet_mode || '1X2').toUpperCase();
+  if (!['1X2', 'HANDICAP'].includes(betMode)) return res.status(400).json({ error: 'Invalid bet mode.' });
 
-  match.odds_home = oddsHome;
-  match.odds_draw = oddsDraw;
-  match.odds_away = oddsAway;
-  const handicapLineRaw = req.body.handicapLine;
-  if (handicapLineRaw !== undefined) {
-    if (handicapLineRaw === null || handicapLineRaw === '') {
-      match.handicap_line = null;
-      match.odds_handicap_home = null;
-      match.odds_handicap_away = null;
-    } else {
-      const handicapLine = Number(handicapLineRaw);
-      const oddsHandicapHome = Number(req.body.oddsHandicapHome);
-      const oddsHandicapAway = Number(req.body.oddsHandicapAway);
-      if (Number.isNaN(handicapLine) || handicapLine < 0) return res.status(400).json({ error: 'Invalid handicap line.' });
-      if ([oddsHandicapHome, oddsHandicapAway].some((x) => Number.isNaN(x) || x <= 1)) {
-        return res.status(400).json({ error: 'Invalid handicap odds.' });
-      }
-      match.handicap_line = handicapLine;
-      match.odds_handicap_home = oddsHandicapHome;
-      match.odds_handicap_away = oddsHandicapAway;
+  if (betMode === '1X2') {
+    if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
+      return res.status(400).json({ error: 'Invalid 1X2 odds.' });
     }
+    match.bet_mode = '1X2';
+    match.odds_home = oddsHome;
+    match.odds_draw = oddsDraw;
+    match.odds_away = oddsAway;
+    match.handicap_line = null;
+    match.odds_handicap_home = null;
+    match.odds_handicap_away = null;
+  } else {
+    const handicapLine = req.body.handicapLine === undefined || req.body.handicapLine === null || req.body.handicapLine === ''
+      ? null
+      : Number(req.body.handicapLine);
+    const oddsHandicapHome = Number(req.body.oddsHandicapHome);
+    const oddsHandicapAway = Number(req.body.oddsHandicapAway);
+    if (handicapLine === null || Number.isNaN(handicapLine) || handicapLine < 0) return res.status(400).json({ error: 'Invalid handicap line.' });
+    if ([oddsHandicapHome, oddsHandicapAway].some((x) => Number.isNaN(x) || x <= 1)) {
+      return res.status(400).json({ error: 'Invalid handicap odds.' });
+    }
+    match.bet_mode = 'HANDICAP';
+    match.handicap_line = handicapLine;
+    match.odds_handicap_home = oddsHandicapHome;
+    match.odds_handicap_away = oddsHandicapAway;
   }
   saveDb();
   res.json({ ok: true });

@@ -158,6 +158,12 @@ async function renderAdminMatches() {
         <td>${m.team_b}</td>
         <td>${fmtTime(m.kickoff_at)}</td>
         <td>
+          <select id="mode-${m.id}" ${canManageOdds ? '' : 'disabled'}>
+            <option value="1X2" ${m.bet_mode === '1X2' ? 'selected' : ''}>1X2</option>
+            <option value="HANDICAP" ${m.bet_mode === 'HANDICAP' ? 'selected' : ''}>Kèo chấp</option>
+          </select>
+        </td>
+        <td>
           <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_home}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
         </td>
         <td>
@@ -184,7 +190,7 @@ async function renderAdminMatches() {
         </td>
       </tr>
     `).join('');
-    els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
     els.adminMatches.innerHTML = `<p class="small error">${e.message}</p>`;
   }
@@ -268,6 +274,7 @@ async function renderMatches() {
   const rows = data.matches.map((m) => {
     const result = m.result ? `KQ: ${pickLabel(m.result)}` : 'Chưa có kết quả';
     const closed = Date.now() >= new Date(m.kickoff_at).getTime() || m.result;
+    const mode = String(m.bet_mode || '1X2');
 
     return `
       <tr>
@@ -278,22 +285,25 @@ async function renderMatches() {
         <td>${result}</td>
         <td>
           ${closed ? '<span class="small">Đã đóng</span>' : `
-            <select id="pick-${m.id}">
-              <option value="HOME">${m.team_a}</option>
-              <option value="DRAW">Hòa</option>
-              <option value="AWAY">${m.team_b}</option>
-            </select>
-            <input id="stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
-            <button onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
-            ${typeof m.handicap_line === 'number' ? `
-              <br><span class="small">Kèo chấp: ${m.team_a} -${m.handicap_line} (${m.odds_handicap_home}) | ${m.team_b} +${m.handicap_line} (${m.odds_handicap_away})</span><br>
+            ${mode === 'HANDICAP' ? `
+              <span class="small">Thể thức: Kèo chấp</span><br>
+              <span class="small">${m.team_a} -${m.handicap_line} (${m.odds_handicap_home}) | ${m.team_b} +${m.handicap_line} (${m.odds_handicap_away})</span><br>
               <select id="hcp-pick-${m.id}">
                 <option value="HOME">${m.team_a} -${m.handicap_line}</option>
                 <option value="AWAY">${m.team_b} +${m.handicap_line}</option>
               </select>
               <input id="hcp-stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
               <button onclick="placeBet(${m.id}, 'HANDICAP')">Đặt kèo chấp</button>
-            ` : ''}
+            ` : `
+              <span class="small">Thể thức: 1X2</span><br>
+              <select id="pick-${m.id}">
+                <option value="HOME">${m.team_a}</option>
+                <option value="DRAW">Hòa</option>
+                <option value="AWAY">${m.team_b}</option>
+              </select>
+              <input id="stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
+              <button onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
+            `}
           `}
         </td>
       </tr>
@@ -498,6 +508,7 @@ document.getElementById('btnAddMatch').onclick = async () => {
     const teamA = document.getElementById('newTeamA').value.trim();
     const teamB = document.getElementById('newTeamB').value.trim();
     const kickoffLocal = document.getElementById('newKickoff').value;
+    const betMode = document.getElementById('newBetMode').value;
     const oddsHome = Number(document.getElementById('newOddsHome').value);
     const oddsDraw = Number(document.getElementById('newOddsDraw').value);
     const oddsAway = Number(document.getElementById('newOddsAway').value);
@@ -510,6 +521,7 @@ document.getElementById('btnAddMatch').onclick = async () => {
       method: 'POST',
       body: JSON.stringify({
         teamA, teamB, kickoffAt, oddsHome, oddsDraw, oddsAway,
+        betMode,
         handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
         oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
         oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
@@ -555,6 +567,7 @@ window.updateOdds = async function (matchId) {
     const oddsHome = Number(document.getElementById(`odds-home-${matchId}`).value);
     const oddsDraw = Number(document.getElementById(`odds-draw-${matchId}`).value);
     const oddsAway = Number(document.getElementById(`odds-away-${matchId}`).value);
+    const betMode = document.getElementById(`mode-${matchId}`).value;
     const handicapLineRaw = document.getElementById(`hcp-line-${matchId}`).value;
     const oddsHandicapHomeRaw = document.getElementById(`hcp-home-${matchId}`).value;
     const oddsHandicapAwayRaw = document.getElementById(`hcp-away-${matchId}`).value;
@@ -562,6 +575,7 @@ window.updateOdds = async function (matchId) {
       method: 'PUT',
       body: JSON.stringify({
         oddsHome, oddsDraw, oddsAway,
+        betMode,
         handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
         oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
         oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
