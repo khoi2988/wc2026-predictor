@@ -35,6 +35,40 @@ const els = {
 };
 let currentUser = null;
 
+function setVisible(el, visible) {
+  if (!el) return;
+  el.classList.toggle('hidden', !visible);
+}
+
+function syncNewMatchModeUI() {
+  const modeEl = document.getElementById('newBetMode');
+  if (!modeEl) return;
+  const mode = modeEl.value;
+  const is1x2 = mode === '1X2';
+  setVisible(document.getElementById('newOddsHome'), is1x2);
+  setVisible(document.getElementById('newOddsDraw'), is1x2);
+  setVisible(document.getElementById('newOddsAway'), is1x2);
+  setVisible(document.getElementById('newHandicapLine'), !is1x2);
+  setVisible(document.getElementById('newOddsHandicapHome'), !is1x2);
+  setVisible(document.getElementById('newOddsHandicapAway'), !is1x2);
+}
+
+function syncRowModeUI(matchId) {
+  const modeEl = document.getElementById(`mode-${matchId}`);
+  if (!modeEl) return;
+  const is1x2 = modeEl.value === '1X2';
+  const ids1x2 = [`odds-home-${matchId}`, `odds-draw-${matchId}`, `odds-away-${matchId}`];
+  const idsHcp = [`hcp-line-${matchId}`, `hcp-home-${matchId}`, `hcp-away-${matchId}`];
+  for (const id of ids1x2) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !is1x2;
+  }
+  for (const id of idsHcp) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = is1x2;
+  }
+}
+
 function setMessage(text, cls = '') {
   els.msg.className = `small ${cls}`;
   els.msg.textContent = text;
@@ -191,6 +225,13 @@ async function renderAdminMatches() {
       </tr>
     `).join('');
     els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
+    for (const m of data.matches) {
+      syncRowModeUI(m.id);
+      const modeEl = document.getElementById(`mode-${m.id}`);
+      if (modeEl) {
+        modeEl.onchange = () => syncRowModeUI(m.id);
+      }
+    }
   } catch (e) {
     els.adminMatches.innerHTML = `<p class="small error">${e.message}</p>`;
   }
@@ -678,3 +719,5 @@ refresh().catch((e) => setMessage(e.message, 'error'));
 setInterval(() => {
   renderHealth().catch(() => {});
 }, 30000);
+document.getElementById('newBetMode').onchange = syncNewMatchModeUI;
+syncNewMatchModeUI();
