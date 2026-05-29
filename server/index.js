@@ -102,6 +102,9 @@ for (const user of db.users) {
   if (!Number.isInteger(user.daily_bonus_days_awarded)) {
     user.daily_bonus_days_awarded = 0;
   }
+  if (typeof user.full_name !== 'string') {
+    user.full_name = '';
+  }
 }
 for (const match of db.matches) {
   if (!Number.isInteger(match.home_score)) match.home_score = null;
@@ -131,6 +134,9 @@ function ensureAdminUser() {
     existing.is_admin = true;
     existing.can_manage_odds = true;
     existing.can_set_result = true;
+    if (!existing.full_name || !String(existing.full_name).trim()) {
+      existing.full_name = 'Quản trị viên';
+    }
     existing.password_hash = passwordHash;
     return;
   }
@@ -143,6 +149,7 @@ function ensureAdminUser() {
     is_admin: true,
     can_manage_odds: true,
     can_set_result: true,
+    full_name: 'Quản trị viên',
     created_at: new Date().toISOString()
   });
 }
@@ -597,6 +604,7 @@ function sanitizeUser(user) {
   return {
     id: user.id,
     username: user.username,
+    full_name: user.full_name || '',
     points: user.points,
     is_admin: Boolean(user.is_admin),
     can_manage_odds: Boolean(user.can_manage_odds),
@@ -615,12 +623,16 @@ function currentUser(req) {
 app.post('/api/register', async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
+  const fullName = String(req.body.fullName || '').trim();
 
   if (username.length < 3 || username.length > 24) {
     return res.status(400).json({ error: 'Username must be 3-24 characters.' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+  if (fullName.length < 2 || fullName.length > 80) {
+    return res.status(400).json({ error: 'Full name must be 2-80 characters.' });
   }
 
   const exists = db.users.some((u) => u.username.toLowerCase() === username.toLowerCase());
@@ -633,6 +645,7 @@ app.post('/api/register', async (req, res) => {
     id: db.nextUserId++,
     username,
     password_hash: passwordHash,
+    full_name: fullName,
     points: STARTING_POINTS,
     is_admin: false,
     can_manage_odds: false,
@@ -750,11 +763,27 @@ app.post('/api/specials/picks', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/profile/full-name', requireAuth, (req, res) => {
+  const fullName = String(req.body.fullName || '').trim();
+  if (fullName.length < 2 || fullName.length > 80) {
+    return res.status(400).json({ error: 'Họ và tên phải từ 2 đến 80 ký tự.' });
+  }
+  const user = db.users.find((u) => u.id === req.session.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  if (user.full_name && user.full_name.trim()) {
+    return res.status(400).json({ error: 'Họ và tên đã được khóa, không thể sửa.' });
+  }
+  user.full_name = fullName;
+  saveDb();
+  res.json({ ok: true, user: sanitizeUser(user) });
+});
+
 app.get('/api/admin/users', requireAdmin, (req, res) => {
   const users = db.users
     .map((u) => ({
       id: u.id,
       username: u.username,
+      full_name: u.full_name || '',
       points: u.points,
       is_admin: Boolean(u.is_admin),
       can_manage_odds: Boolean(u.can_manage_odds),

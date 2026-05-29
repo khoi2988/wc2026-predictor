@@ -39,7 +39,8 @@ const els = {
   adminSpecials: document.getElementById('adminSpecials'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
-  changePasswordForm: document.getElementById('changePasswordForm')
+  changePasswordForm: document.getElementById('changePasswordForm'),
+  fullNameLockCard: document.getElementById('fullNameLockCard')
 };
 let currentUser = null;
 
@@ -155,6 +156,7 @@ async function refresh() {
     els.adminMatches.innerHTML = '';
     els.adminUsers.innerHTML = '';
     els.currentUserLabel.textContent = '';
+    els.fullNameLockCard.classList.add('hidden');
     els.changePasswordForm.classList.add('hidden');
     els.me.innerHTML = '<span class="badge">Chưa đăng nhập</span>';
     await renderHealth();
@@ -178,8 +180,14 @@ async function refresh() {
   } else {
     els.adminPanel.classList.add('hidden');
   }
-  els.currentUserLabel.textContent = `Tài khoản: ${user.username}`;
-  els.me.innerHTML = `<span class="badge">${user.username}</span> <span class="badge">${user.points} points</span>`;
+  const displayName = user.full_name && user.full_name.trim() ? user.full_name : user.username;
+  els.currentUserLabel.textContent = `Tài khoản: ${user.username} | Họ tên: ${displayName}`;
+  els.me.innerHTML = `<span class="badge">${displayName}</span> <span class="badge">${user.points} points</span>`;
+  if (!user.full_name || !user.full_name.trim()) {
+    els.fullNameLockCard.classList.remove('hidden');
+  } else {
+    els.fullNameLockCard.classList.add('hidden');
+  }
 
   await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials(), renderHealth()]);
 }
@@ -260,7 +268,7 @@ async function renderAdminUsers() {
     const rows = data.users.map((u) => `
       <tr>
         <td>${u.id}</td>
-        <td>${u.username}${u.is_admin ? ' (admin)' : ''}</td>
+        <td>${u.username}${u.is_admin ? ' (admin)' : ''}<br><span class="small">${u.full_name || '-'}</span></td>
         <td>${u.points}</td>
         <td>
           ${u.is_admin ? '<span class="small">Full</span>' : `
@@ -449,7 +457,8 @@ document.getElementById('btnRegister').onclick = async () => {
   try {
     const username = document.getElementById('regUser').value;
     const password = document.getElementById('regPass').value;
-    await api('/api/register', { method: 'POST', body: JSON.stringify({ username, password }) });
+    const fullName = document.getElementById('regFullName').value;
+    await api('/api/register', { method: 'POST', body: JSON.stringify({ username, password, fullName }) });
     setMessage('Đăng ký thành công', 'success');
     await refresh();
   } catch (e) {
@@ -463,6 +472,21 @@ document.getElementById('btnLogin').onclick = async () => {
     const password = document.getElementById('loginPass').value;
     await api('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) });
     setMessage('Đăng nhập thành công', 'success');
+    await refresh();
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+document.getElementById('btnSetFullName').onclick = async () => {
+  try {
+    const fullName = document.getElementById('setFullNameInput').value.trim();
+    await api('/api/profile/full-name', {
+      method: 'POST',
+      body: JSON.stringify({ fullName })
+    });
+    setMessage('Đã cập nhật họ và tên thành công', 'success');
+    document.getElementById('setFullNameInput').value = '';
     await refresh();
   } catch (e) {
     setMessage(e.message, 'error');

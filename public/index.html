@@ -29,6 +29,7 @@
       <div id="registerForm" class="hidden">
         <h2>Đăng ký</h2>
         <div class="row">
+          <input id="regFullName" placeholder="Họ và tên" />
           <input id="regUser" placeholder="username" />
           <input id="regPass" type="password" placeholder="password" />
           <button id="btnRegister">Tạo tài khoản</button>
@@ -124,6 +125,15 @@
           <input id="newPassword" type="password" placeholder="Mật khẩu mới (>= 6 ký tự)" />
           <button id="btnChangePassword">Cập nhật mật khẩu</button>
         </div>
+      </div>
+
+      <div id="fullNameLockCard" class="card hidden">
+        <h2>Cập nhật họ và tên (chỉ 1 lần)</h2>
+        <div class="row">
+          <input id="setFullNameInput" placeholder="Nhập họ và tên của bạn" />
+          <button id="btnSetFullName" class="alt">Lưu và khóa</button>
+        </div>
+        <p class="small">Sau khi lưu, bạn sẽ không thể chỉnh sửa lại.</p>
       </div>
 
     </div>
