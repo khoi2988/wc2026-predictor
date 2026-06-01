@@ -397,10 +397,16 @@ async function renderMatches() {
 async function renderLeaderboard() {
   const data = await api('/api/leaderboard');
   const rows = data.leaderboard.map((u, i) => `
-    <tr><td>#${i + 1}</td><td>${u.username}</td><td>${u.points}</td></tr>
+    <tr>
+      <td>#${i + 1}</td>
+      <td>${u.username}<br><span class="small">${u.full_name || '-'}</span></td>
+      <td>${u.points_available}</td>
+      <td>${u.points_on_bet}</td>
+      <td>${u.points_total}</td>
+    </tr>
   `).join('');
 
-  els.leaderboard.innerHTML = `<table><thead><tr><th>Rank</th><th>User</th><th>Points</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.leaderboard.innerHTML = `<table><thead><tr><th>Rank</th><th>User</th><th>Điểm đang có</th><th>Điểm đang đặt cược</th><th>Điểm tổng</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function renderMyBets() {

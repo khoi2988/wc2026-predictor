@@ -736,10 +736,22 @@ app.get('/api/matches', (req, res) => {
 app.get('/api/leaderboard', (req, res) => {
   applyDailyBonusToAllUsers();
   const leaderboard = db.users
-    .map(sanitizeUser)
-    .sort((a, b) => (b.points - a.points) || a.username.localeCompare(b.username))
-    .slice(0, 50)
-    .map((u) => ({ username: u.username, points: u.points }));
+    .map((u) => {
+      const pointsOnBet = db.bets
+        .filter((b) => b.user_id === u.id && b.status === 'open')
+        .reduce((sum, b) => sum + b.stake, 0);
+      const pointsAvailable = u.points;
+      const pointsTotal = pointsAvailable + pointsOnBet;
+      return {
+        username: u.username,
+        full_name: u.full_name || '',
+        points_available: pointsAvailable,
+        points_on_bet: pointsOnBet,
+        points_total: pointsTotal
+      };
+    })
+    .sort((a, b) => (b.points_total - a.points_total) || (b.points_available - a.points_available) || a.username.localeCompare(b.username))
+    .slice(0, 50);
 
   res.json({ leaderboard });
 });
