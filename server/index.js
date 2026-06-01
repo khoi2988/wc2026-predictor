@@ -565,13 +565,17 @@ function settleAsianLeg(scoreDiff, handicapFromHome, sidePick) {
 }
 
 function settleAsianHandicapBet({ homeScore, awayScore, line, pick, stake, odds }) {
-  const scoreDiff = homeScore - awayScore;
+  const sideScore = pick === 'HOME' ? homeScore : awayScore;
+  const oppScore = pick === 'HOME' ? awayScore : homeScore;
   const signedHandicap = pick === 'HOME' ? -line : line;
   const decimalPart = Math.abs(signedHandicap % 1);
   const isQuarter = Math.abs(decimalPart - 0.25) < 1e-9 || Math.abs(decimalPart - 0.75) < 1e-9;
 
-  const evaluate = (legStake, handicapFromHome) => {
-    const outcome = settleAsianLeg(scoreDiff, handicapFromHome, pick);
+  const evaluate = (legStake, sideHandicap) => {
+    const adjusted = (sideScore + sideHandicap) - oppScore;
+    let outcome = 'LOSE';
+    if (adjusted > 0) outcome = 'WIN';
+    else if (adjusted === 0) outcome = 'PUSH';
     if (outcome === 'WIN') return { credit: Math.floor(legStake * odds), outcome: 'WIN' };
     if (outcome === 'PUSH') return { credit: legStake, outcome: 'PUSH' };
     return { credit: 0, outcome: 'LOSE' };
@@ -598,6 +602,28 @@ function settleAsianHandicapBet({ homeScore, awayScore, line, pick, stake, odds 
   else if (outcomes.includes('LOSE') && outcomes.includes('PUSH')) status = 'half_lost';
 
   return { status, payout };
+}
+
+function calculateBetSettlement(match, bet) {
+  const market = String(bet.market || '1X2');
+  if (market === 'HANDICAP') {
+    if (!Number.isInteger(match.home_score) || !Number.isInteger(match.away_score) || typeof bet.handicap_line !== 'number') {
+      return null;
+    }
+    return settleAsianHandicapBet({
+      homeScore: match.home_score,
+      awayScore: match.away_score,
+      line: bet.handicap_line,
+      pick: bet.pick,
+      stake: bet.stake,
+      odds: bet.odds
+    });
+  }
+
+  if (bet.pick === match.result) {
+    return { status: 'won', payout: Math.floor(bet.stake * bet.odds) };
+  }
+  return { status: 'lost', payout: 0 };
 }
 
 function sanitizeUser(user) {
@@ -1288,39 +1314,48 @@ app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) =>
 
   const matchBets = db.bets.filter((b) => b.match_id === matchId);
   for (const bet of matchBets) {
-    const market = String(bet.market || '1X2');
-    if (market === 'HANDICAP') {
-      if (!Number.isInteger(match.home_score) || !Number.isInteger(match.away_score) || typeof bet.handicap_line !== 'number') {
-        return res.status(400).json({ error: 'Cần nhập tỷ số để chốt kèo chấp.' });
-      }
-      const settled = settleAsianHandicapBet({
-        homeScore: match.home_score,
-        awayScore: match.away_score,
-        line: bet.handicap_line,
-        pick: bet.pick,
-        stake: bet.stake,
-        odds: bet.odds
-      });
-      const user = db.users.find((u) => u.id === bet.user_id);
-      if (user && settled.payout > 0) user.points += settled.payout;
-      bet.status = settled.status;
-      bet.payout = settled.payout;
-    } else {
-      if (bet.pick === result) {
-        const payout = Math.floor(bet.stake * bet.odds);
-        const user = db.users.find((u) => u.id === bet.user_id);
-        if (user) user.points += payout;
-        bet.status = 'won';
-        bet.payout = payout;
-      } else {
-        bet.status = 'lost';
-        bet.payout = 0;
-      }
-    }
+    const settled = calculateBetSettlement(match, bet);
+    if (!settled) return res.status(400).json({ error: 'Cần nhập tỷ số để chốt kèo chấp.' });
+    const user = db.users.find((u) => u.id === bet.user_id);
+    if (user && settled.payout > 0) user.points += settled.payout;
+    bet.status = settled.status;
+    bet.payout = settled.payout;
   }
 
   saveDb();
   res.json({ ok: true, settledBets: matchBets.length });
+});
+
+app.post('/api/admin/recalculate-match/:id', requireAdmin, (req, res) => {
+  const matchId = Number(req.params.id);
+  if (!Number.isInteger(matchId)) return res.status(400).json({ error: 'Invalid match id.' });
+
+  const match = db.matches.find((m) => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (!match.result) return res.status(400).json({ error: 'Match chưa chốt kết quả.' });
+
+  const bets = db.bets.filter((b) => b.match_id === matchId);
+  let adjustedUsers = 0;
+  let totalDelta = 0;
+
+  for (const bet of bets) {
+    const settled = calculateBetSettlement(match, bet);
+    if (!settled) {
+      return res.status(400).json({ error: 'Kèo chấp cần tỷ số đầy đủ để tính lại.' });
+    }
+    const oldPayout = Number.isInteger(bet.payout) ? bet.payout : 0;
+    const delta = settled.payout - oldPayout;
+    const user = db.users.find((u) => u.id === bet.user_id);
+    if (!user) continue;
+    user.points += delta;
+    bet.payout = settled.payout;
+    bet.status = settled.status;
+    adjustedUsers += 1;
+    totalDelta += delta;
+  }
+
+  saveDb();
+  res.json({ ok: true, matchId, adjustedBets: bets.length, adjustedUsers, totalDelta });
 });
 
 app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (req, res) => {

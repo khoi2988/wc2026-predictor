@@ -245,6 +245,7 @@ async function renderAdminMatches() {
           ${canSetResult ? `<input id="score-home-${m.id}" type="number" min="0" placeholder="${m.team_a}" style="width:75px" />` : ''}
           ${canSetResult ? `<input id="score-away-${m.id}" type="number" min="0" placeholder="${m.team_b}" style="width:75px" />` : ''}
           ${canSetResult ? `<button onclick="settleByScore(${m.id})">Chốt tỷ số</button>` : ''}
+          ${canSetResult ? `<button onclick="recalculateMatch(${m.id})">Tính lại trả thưởng</button>` : ''}
           ${canDelete ? `<button onclick="deleteMatch(${m.id})">Xóa</button>` : ''}
         </td>
       </tr>
@@ -688,6 +689,16 @@ window.updateOdds = async function (matchId) {
     });
     setMessage('Cập nhật kèo thành công', 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.recalculateMatch = async function (matchId) {
+  try {
+    const rs = await adminApi(`/api/admin/recalculate-match/${matchId}`, { method: 'POST' });
+    setMessage(`Đã tính lại ${rs.adjustedBets} cược. Tổng chênh lệch điểm: ${rs.totalDelta}`, 'success');
+    await Promise.all([refresh(), renderAdminMatches(), renderAdminUsers()]);
   } catch (e) {
     setMessage(e.message, 'error');
   }
