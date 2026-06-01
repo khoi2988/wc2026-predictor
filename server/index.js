@@ -1031,6 +1031,78 @@ app.get('/api/admin/users/:id/export', requireAdmin, (req, res) => {
   res.send('\uFEFF' + csv);
 });
 
+app.get('/api/admin/matches/:id/export-settlement', requirePermission('can_set_result'), (req, res) => {
+  const matchId = Number(req.params.id);
+  if (!Number.isInteger(matchId)) return res.status(400).json({ error: 'Invalid match id.' });
+
+  const match = db.matches.find((m) => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (!match.result) return res.status(400).json({ error: 'Match chưa chốt kết quả.' });
+
+  const bets = db.bets.filter((b) => b.match_id === matchId);
+  const rows = bets.map((b) => {
+    const user = db.users.find((u) => u.id === b.user_id);
+    const payout = Number.isInteger(b.payout) ? b.payout : 0;
+    const netDelta = payout - b.stake;
+    return {
+      user_id: b.user_id,
+      username: user?.username || '',
+      full_name: user?.full_name || '',
+      market: b.market || '1X2',
+      pick: b.pick,
+      handicap_line: b.handicap_line ?? '',
+      stake: b.stake,
+      odds: b.odds,
+      status: b.status || '',
+      payout,
+      net_delta: netDelta
+    };
+  });
+
+  const header = [
+    'match_id',
+    'team_a',
+    'team_b',
+    'kickoff_at',
+    'result',
+    'home_score',
+    'away_score',
+    'user_id',
+    'username',
+    'full_name',
+    'market',
+    'pick',
+    'handicap_line',
+    'stake',
+    'odds',
+    'status',
+    'payout',
+    'net_delta'
+  ];
+
+  const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csvRows = rows.map((r) => {
+    const record = {
+      match_id: match.id,
+      team_a: match.team_a,
+      team_b: match.team_b,
+      kickoff_at: match.kickoff_at,
+      result: match.result,
+      home_score: match.home_score ?? '',
+      away_score: match.away_score ?? '',
+      ...r
+    };
+    return header.map((k) => escapeCsv(record[k])).join(',');
+  });
+
+  const csv = [header.join(','), ...csvRows].join('\n');
+  const safeA = String(match.team_a || 'A').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeB = String(match.team_b || 'B').replace(/[^a-zA-Z0-9_-]/g, '_');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename=\"match_${match.id}_${safeA}_vs_${safeB}_settlement.csv\"`);
+  res.send('\uFEFF' + csv);
+});
+
 app.get('/api/my-bets', requireAuth, (req, res) => {
   const bets = db.bets
     .filter((b) => b.user_id === req.session.user.id)

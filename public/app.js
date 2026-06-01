@@ -246,6 +246,7 @@ async function renderAdminMatches() {
           ${canSetResult ? `<input id="score-away-${m.id}" type="number" min="0" placeholder="${m.team_b}" style="width:75px" />` : ''}
           ${canSetResult ? `<button onclick="settleByScore(${m.id})">Chốt tỷ số</button>` : ''}
           ${canSetResult ? `<button onclick="recalculateMatch(${m.id})">Tính lại trả thưởng</button>` : ''}
+          ${canSetResult && m.result ? `<button onclick="exportMatchSettlement(${m.id})">Export kết quả</button>` : ''}
           ${canDelete ? `<button onclick="deleteMatch(${m.id})">Xóa</button>` : ''}
         </td>
       </tr>
@@ -708,6 +709,10 @@ window.recalculateMatch = async function (matchId) {
   } catch (e) {
     setMessage(e.message, 'error');
   }
+};
+
+window.exportMatchSettlement = function (matchId) {
+  window.open(`/api/admin/matches/${matchId}/export-settlement`, '_blank');
 };
 
 window.deleteMatch = async function (matchId) {
