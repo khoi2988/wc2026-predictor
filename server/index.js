@@ -891,6 +891,14 @@ app.post('/api/admin/users/bulk-points', requireAdmin, (req, res) => {
   res.json({ ok: true, affectedUsers: db.users.length, delta });
 });
 
+app.post('/api/admin/users/reset-points', requireAdmin, (req, res) => {
+  for (const user of db.users) {
+    user.points = STARTING_POINTS;
+  }
+  saveDb();
+  res.json({ ok: true, affectedUsers: db.users.length, points: STARTING_POINTS });
+});
+
 app.get('/api/admin/daily-bonus', requireAdmin, (req, res) => {
   applyDailyBonusToAllUsers();
   const targetDays = calculateBonusTargetDays(new Date());

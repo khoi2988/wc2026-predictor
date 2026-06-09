@@ -598,6 +598,19 @@ document.getElementById('btnBulkSubtractPoints').onclick = async () => {
   }
 };
 
+document.getElementById('btnResetAllPoints').onclick = async () => {
+  try {
+    if (!window.confirm('Reset điểm đang có của toàn bộ user về mức khởi tạo mặc định?')) return;
+    const result = await adminApi('/api/admin/users/reset-points', {
+      method: 'POST'
+    });
+    setMessage(`Đã reset điểm của ${result.affectedUsers} user về ${result.points}`, 'success');
+    await Promise.all([refresh(), renderAdminUsers(), renderLeaderboard()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
 document.getElementById('btnAdminLoadUsers').onclick = async () => {
   await renderAdminUsers();
 };
