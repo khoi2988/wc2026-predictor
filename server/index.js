@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const STARTING_POINTS = 1000;
 const RESET_PASSWORD_DEFAULT = '123456';
-const SPECIAL_BONUS_POINTS = 300;
+const SPECIAL_BONUS_POINTS = 10000;
+const SPECIAL_PREDICTION_DEADLINE_ISO = '2026-06-14T16:59:59.999Z';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-this-secret-in-production';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -125,6 +126,9 @@ if (!Array.isArray(db.specialPicks)) {
 if (!db.dailyBonus || typeof db.dailyBonus !== 'object') {
   db.dailyBonus = defaultDb().dailyBonus;
 }
+for (const market of db.specialMarkets) {
+  market.bonus_points = SPECIAL_BONUS_POINTS;
+}
 
 function ensureAdminUser() {
   const existing = db.users.find((u) => u.username === ADMIN_USERNAME);
@@ -196,6 +200,9 @@ async function loadDbRemoteIfEnabled() {
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
     if (!db.dailyBonus || typeof db.dailyBonus !== 'object') db.dailyBonus = defaultDb().dailyBonus;
+    for (const market of db.specialMarkets) {
+      market.bonus_points = SPECIAL_BONUS_POINTS;
+    }
     fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
     return;
   }
@@ -218,6 +225,10 @@ function parseLocalDateToUtc(dateStr) {
   const d = Number(m[3]);
   const dt = new Date(Date.UTC(y, mo, d));
   return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function isSpecialPredictionLocked(now = new Date()) {
+  return now.getTime() > new Date(SPECIAL_PREDICTION_DEADLINE_ISO).getTime();
 }
 
 function toDateOnlyKey(dateObj) {
@@ -757,6 +768,7 @@ app.get('/api/leaderboard', (req, res) => {
 });
 
 app.get('/api/specials', requireAuth, (req, res) => {
+  const locked = isSpecialPredictionLocked();
   const picks = db.specialPicks
     .filter((p) => p.user_id === req.session.user.id)
     .map((p) => {
@@ -767,13 +779,22 @@ app.get('/api/specials', requireAuth, (req, res) => {
         market_result: market?.result || null
       };
     });
-  res.json({ markets: db.specialMarkets, picks });
+  res.json({
+    markets: db.specialMarkets,
+    picks,
+    locked,
+    deadline_iso: SPECIAL_PREDICTION_DEADLINE_ISO,
+    deadline_text: '23:59 ngày 14/06/2026 (GMT+7)'
+  });
 });
 
 app.post('/api/specials/picks', requireAuth, (req, res) => {
   const marketKey = String(req.body.marketKey || '').trim();
   const prediction = String(req.body.prediction || '').trim();
   if (!marketKey || !prediction) return res.status(400).json({ error: 'Missing market or prediction.' });
+  if (isSpecialPredictionLocked()) {
+    return res.status(400).json({ error: 'Đã hết hạn dự đoán vui (sau 23:59 ngày 14/06/2026 GMT+7).' });
+  }
 
   const market = db.specialMarkets.find((m) => m.key === marketKey);
   if (!market) return res.status(404).json({ error: 'Market not found.' });

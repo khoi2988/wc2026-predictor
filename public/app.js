@@ -296,15 +296,22 @@ async function renderAdminUsers() {
 
 async function renderSpecials() {
   const data = await api('/api/specials');
+  const actionColLabel = data.locked ? 'Đã khóa' : 'Thao tác';
   const formRows = data.markets.map((m) => `
     <tr>
       <td>${m.title}</td>
       <td>${m.result || '-'}</td>
-      <td><input id="special-${m.key}" placeholder="Nhập dự đoán..." style="min-width:240px" /></td>
-      <td><button onclick="saveSpecialPick('${m.key}')">Lưu dự đoán</button></td>
+      <td>
+        <input id="special-${m.key}" placeholder="Nhập dự đoán..." style="min-width:240px" ${data.locked || m.result ? 'disabled' : ''} />
+        <div class="small">Thưởng đúng: ${m.bonus_points} điểm</div>
+      </td>
+      <td>${data.locked || m.result ? '<span class="small">Đã khóa</span>' : `<button onclick="saveSpecialPick('${m.key}')">Lưu dự đoán</button>`}</td>
     </tr>
   `).join('');
-  els.specialMarkets.innerHTML = `<table><thead><tr><th>Hạng mục</th><th>Kết quả chính thức</th><th>Dự đoán</th><th>Thao tác</th></tr></thead><tbody>${formRows}</tbody></table>`;
+  els.specialMarkets.innerHTML = `
+    <div class="small">${data.locked ? 'Dự đoán vui đã khóa.' : 'Có thể dự đoán đến hết'} Hạn chót: ${data.deadline_text}.</div>
+    <table><thead><tr><th>Hạng mục</th><th>Kết quả chính thức</th><th>Dự đoán</th><th>${actionColLabel}</th></tr></thead><tbody>${formRows}</tbody></table>
+  `;
 
   const pickRows = data.picks.map((p) => `
     <tr>
