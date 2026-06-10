@@ -37,6 +37,7 @@ const els = {
   matchCreateRow: document.getElementById('matchCreateRow'),
   adminUsers: document.getElementById('adminUsers'),
   adminSpecials: document.getElementById('adminSpecials'),
+  adminSpecialsStatus: document.getElementById('adminSpecialsStatus'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
   changePasswordForm: document.getElementById('changePasswordForm'),
@@ -327,6 +328,11 @@ async function renderSpecials() {
 async function renderAdminSpecials() {
   try {
     const data = await adminApi('/api/admin/specials');
+    const deadlineLocal = new Date(data.deadline_iso);
+    const pad = (v) => String(v).padStart(2, '0');
+    document.getElementById('adminSpecialDeadline').value = `${deadlineLocal.getFullYear()}-${pad(deadlineLocal.getMonth() + 1)}-${pad(deadlineLocal.getDate())}T${pad(deadlineLocal.getHours())}:${pad(deadlineLocal.getMinutes())}`;
+    document.getElementById('adminSpecialManualLock').checked = Boolean(data.manually_locked);
+    els.adminSpecialsStatus.textContent = `${data.locked ? 'Dự đoán vui đã khóa.' : 'Dự đoán vui đang mở.'} Hạn chót: ${data.deadline_text}. Mỗi dự đoán đúng được ${data.markets[0]?.bonus_points || 0} điểm.`;
     const rows = data.markets.map((m) => `
       <tr>
         <td>${m.title}</td>
@@ -340,9 +346,30 @@ async function renderAdminSpecials() {
     `).join('');
     els.adminSpecials.innerHTML = `<table><thead><tr><th>Hạng mục</th><th>Số dự đoán</th><th>Kết quả</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
+    els.adminSpecialsStatus.textContent = '';
     els.adminSpecials.innerHTML = `<p class="small error">${e.message}</p>`;
   }
 }
+
+document.getElementById('btnSaveSpecialConfig').onclick = async () => {
+  try {
+    const deadlineLocal = document.getElementById('adminSpecialDeadline').value;
+    const manuallyLocked = document.getElementById('adminSpecialManualLock').checked;
+    if (!deadlineLocal) {
+      setMessage('Vui lòng chọn hạn dự đoán vui', 'error');
+      return;
+    }
+    const deadlineIso = new Date(deadlineLocal).toISOString();
+    await adminApi('/api/admin/specials/config', {
+      method: 'POST',
+      body: JSON.stringify({ deadlineIso, manuallyLocked })
+    });
+    setMessage('Đã cập nhật cấu hình dự đoán vui', 'success');
+    await Promise.all([renderAdminSpecials(), renderSpecials()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
 
 async function renderMatches() {
   const data = await api('/api/matches');

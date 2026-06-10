@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const STARTING_POINTS = 1000;
 const RESET_PASSWORD_DEFAULT = '123456';
-const SPECIAL_BONUS_POINTS = 10000;
+const SPECIAL_BONUS_POINTS = 5000;
 const SPECIAL_PREDICTION_DEADLINE_ISO = '2026-06-14T16:59:59.999Z';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-this-secret-in-production';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
@@ -56,6 +56,10 @@ function defaultDb() {
       { key: 'wc_best_goalkeeper', title: 'Dự đoán thủ môn xuất sắc nhất World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS }
     ],
     specialPicks: [],
+    specialPredictionConfig: {
+      deadline_iso: SPECIAL_PREDICTION_DEADLINE_ISO,
+      manually_locked: false
+    },
     dailyBonus: {
       enabled: false,
       start_date: null,
@@ -125,6 +129,15 @@ if (!Array.isArray(db.specialPicks)) {
 }
 if (!db.dailyBonus || typeof db.dailyBonus !== 'object') {
   db.dailyBonus = defaultDb().dailyBonus;
+}
+if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') {
+  db.specialPredictionConfig = defaultDb().specialPredictionConfig;
+}
+if (typeof db.specialPredictionConfig.deadline_iso !== 'string' || !db.specialPredictionConfig.deadline_iso) {
+  db.specialPredictionConfig.deadline_iso = SPECIAL_PREDICTION_DEADLINE_ISO;
+}
+if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') {
+  db.specialPredictionConfig.manually_locked = false;
 }
 for (const market of db.specialMarkets) {
   market.bonus_points = SPECIAL_BONUS_POINTS;
@@ -200,6 +213,9 @@ async function loadDbRemoteIfEnabled() {
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
     if (!db.dailyBonus || typeof db.dailyBonus !== 'object') db.dailyBonus = defaultDb().dailyBonus;
+    if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') db.specialPredictionConfig = defaultDb().specialPredictionConfig;
+    if (typeof db.specialPredictionConfig.deadline_iso !== 'string' || !db.specialPredictionConfig.deadline_iso) db.specialPredictionConfig.deadline_iso = SPECIAL_PREDICTION_DEADLINE_ISO;
+    if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') db.specialPredictionConfig.manually_locked = false;
     for (const market of db.specialMarkets) {
       market.bonus_points = SPECIAL_BONUS_POINTS;
     }
@@ -228,7 +244,20 @@ function parseLocalDateToUtc(dateStr) {
 }
 
 function isSpecialPredictionLocked(now = new Date()) {
-  return now.getTime() > new Date(SPECIAL_PREDICTION_DEADLINE_ISO).getTime();
+  const cfg = db.specialPredictionConfig || {};
+  if (cfg.manually_locked) return true;
+  const deadlineIso = cfg.deadline_iso || SPECIAL_PREDICTION_DEADLINE_ISO;
+  return now.getTime() > new Date(deadlineIso).getTime();
+}
+
+function formatSpecialPredictionDeadlineText(deadlineIso) {
+  const dt = new Date(deadlineIso || SPECIAL_PREDICTION_DEADLINE_ISO);
+  const day = String(dt.getUTCDate()).padStart(2, '0');
+  const month = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const year = dt.getUTCFullYear();
+  const hour = String((dt.getUTCHours() + 7) % 24).padStart(2, '0');
+  const minute = String(dt.getUTCMinutes()).padStart(2, '0');
+  return `${hour}:${minute} ngày ${day}/${month}/${year} (GMT+7)`;
 }
 
 function toDateOnlyKey(dateObj) {
@@ -783,8 +812,8 @@ app.get('/api/specials', requireAuth, (req, res) => {
     markets: db.specialMarkets,
     picks,
     locked,
-    deadline_iso: SPECIAL_PREDICTION_DEADLINE_ISO,
-    deadline_text: '23:59 ngày 14/06/2026 (GMT+7)'
+    deadline_iso: db.specialPredictionConfig.deadline_iso,
+    deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso)
   });
 });
 
@@ -961,11 +990,37 @@ app.post('/api/admin/daily-bonus', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/specials', requireAdmin, (req, res) => {
+  const locked = isSpecialPredictionLocked();
   const markets = db.specialMarkets.map((m) => ({
     ...m,
     total_picks: db.specialPicks.filter((p) => p.market_key === m.key).length
   }));
-  res.json({ markets });
+  res.json({
+    markets,
+    locked,
+    deadline_iso: db.specialPredictionConfig.deadline_iso,
+    deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso),
+    manually_locked: Boolean(db.specialPredictionConfig.manually_locked)
+  });
+});
+
+app.post('/api/admin/specials/config', requireAdmin, (req, res) => {
+  const deadlineIso = String(req.body.deadlineIso || '').trim();
+  const manuallyLocked = Boolean(req.body.manuallyLocked);
+  const parsed = new Date(deadlineIso);
+  if (Number.isNaN(parsed.getTime())) {
+    return res.status(400).json({ error: 'Deadline không hợp lệ.' });
+  }
+
+  db.specialPredictionConfig.deadline_iso = parsed.toISOString();
+  db.specialPredictionConfig.manually_locked = manuallyLocked;
+  saveDb();
+  res.json({
+    ok: true,
+    deadline_iso: db.specialPredictionConfig.deadline_iso,
+    deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso),
+    manually_locked: db.specialPredictionConfig.manually_locked
+  });
 });
 
 app.post('/api/admin/specials/:key/settle', requireAdmin, (req, res) => {
