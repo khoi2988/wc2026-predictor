@@ -50,9 +50,12 @@ const els = {
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
   changePasswordForm: document.getElementById('changePasswordForm'),
-  fullNameLockCard: document.getElementById('fullNameLockCard')
+  fullNameLockCard: document.getElementById('fullNameLockCard'),
+  betConfirmModal: document.getElementById('betConfirmModal'),
+  betConfirmContent: document.getElementById('betConfirmContent')
 };
 let currentUser = null;
+let pendingBetPayload = null;
 
 function setVisible(el, visible) {
   if (!el) return;
@@ -135,6 +138,24 @@ function betPickText(bet) {
   if (bet.pick === 'HOME') return `${bet.team_a} thắng`;
   if (bet.pick === 'DRAW') return 'Hòa';
   return `${bet.team_b} thắng`;
+}
+
+function closeBetConfirm() {
+  pendingBetPayload = null;
+  els.betConfirmModal.classList.add('hidden');
+  els.betConfirmContent.innerHTML = '';
+}
+
+function openBetConfirm(payload) {
+  pendingBetPayload = payload;
+  els.betConfirmContent.innerHTML = `
+    <p><strong>Trận:</strong> ${payload.teamA} vs ${payload.teamB}</p>
+    <p><strong>Thể thức:</strong> ${marketLabel(payload.market, payload.handicapLine)}</p>
+    <p><strong>Lựa chọn:</strong> ${payload.pickText}</p>
+    <p><strong>Tỷ lệ:</strong> ${payload.odds}</p>
+    <p><strong>Số điểm đặt:</strong> ${payload.stake}</p>
+  `;
+  els.betConfirmModal.classList.remove('hidden');
 }
 
 async function renderHealth() {
@@ -477,16 +498,55 @@ async function renderMyBets() {
 
 window.placeBet = async function (matchId, market = '1X2') {
   try {
+    const matchesRes = await api('/api/matches');
+    const match = matchesRes.matches.find((m) => m.id === matchId);
+    if (!match) {
+      setMessage('Không tìm thấy trận đấu', 'error');
+      return;
+    }
     const pick = market === 'HANDICAP'
       ? document.getElementById(`hcp-pick-${matchId}`).value
       : document.getElementById(`pick-${matchId}`).value;
     const stake = Number(market === 'HANDICAP'
       ? document.getElementById(`hcp-stake-${matchId}`).value
       : document.getElementById(`stake-${matchId}`).value);
+    const odds = market === 'HANDICAP'
+      ? (pick === 'HOME' ? match.odds_handicap_home : match.odds_handicap_away)
+      : (pick === 'HOME' ? match.odds_home : (pick === 'DRAW' ? match.odds_draw : match.odds_away));
+    const pickText = betPickText({
+      market,
+      pick,
+      handicap_line: match.handicap_line,
+      team_a: match.team_a,
+      team_b: match.team_b
+    });
+    openBetConfirm({
+      matchId,
+      market,
+      pick,
+      stake,
+      odds,
+      handicapLine: match.handicap_line,
+      teamA: match.team_a,
+      teamB: match.team_b,
+      pickText
+    });
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+document.getElementById('btnCancelBetConfirm').onclick = closeBetConfirm;
+document.getElementById('betConfirmBackdrop').onclick = closeBetConfirm;
+document.getElementById('btnConfirmBet').onclick = async () => {
+  try {
+    if (!pendingBetPayload) return;
+    const { matchId, market, pick, stake } = pendingBetPayload;
     await api('/api/bets', {
       method: 'POST',
       body: JSON.stringify({ matchId, market, pick, stake })
     });
+    closeBetConfirm();
     setMessage('Đặt cược thành công', 'success');
     await refresh();
   } catch (e) {

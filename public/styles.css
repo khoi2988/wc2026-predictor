@@ -107,6 +107,31 @@ thead th {
 .success { color: #166534; font-weight: 600; }
 .hidden { display: none; }
 
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 33, 43, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 460px);
+  margin: 12vh auto 0;
+  padding: 20px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #fffdf8 0%, #fff6ea 100%);
+  box-shadow: 0 20px 40px rgba(20, 33, 43, 0.18);
+}
+
 @media (max-width: 900px) {
   h1 { font-size: 32px; }
   .two { grid-template-columns: 1fr; }
