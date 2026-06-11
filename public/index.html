@@ -44,27 +44,35 @@
     </div>
 
     <div id="main" class="grid hidden">
-      <div class="grid two">
-        <div class="card">
+      <div class="card">
+        <div class="tab-bar">
+          <button class="tab-btn active" data-tab="matchesTab">Trận & đặt cược</button>
+          <button class="tab-btn" data-tab="leaderboardTab">Bảng xếp hạng</button>
+          <button class="tab-btn" data-tab="myBetsTab">Lịch sử cược</button>
+          <button class="tab-btn" data-tab="specialsTab">Dự đoán vui</button>
+        </div>
+
+        <div id="matchesTab" class="tab-panel active">
           <h2>Danh sách trận & đặt cược</h2>
           <div id="matches"></div>
         </div>
-        <div class="card">
+
+        <div id="leaderboardTab" class="tab-panel hidden">
           <h2>Bảng xếp hạng</h2>
           <div id="leaderboard"></div>
         </div>
-      </div>
 
-      <div class="card">
-        <h2>Cược của tôi</h2>
-        <div id="myBets"></div>
-      </div>
+        <div id="myBetsTab" class="tab-panel hidden">
+          <h2>Cược của tôi</h2>
+          <div id="myBets"></div>
+        </div>
 
-      <div class="card">
-        <h2>Dự đoán vui World Cup</h2>
-        <div id="specialMarkets"></div>
-        <h3>Dự đoán của tôi</h3>
-        <div id="mySpecialPicks"></div>
+        <div id="specialsTab" class="tab-panel hidden">
+          <h2>Dự đoán vui World Cup</h2>
+          <div id="specialMarkets"></div>
+          <h3>Dự đoán của tôi</h3>
+          <div id="mySpecialPicks"></div>
+        </div>
       </div>
 
       <div id="adminPanel" class="card hidden">

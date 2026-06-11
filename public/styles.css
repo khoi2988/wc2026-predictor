@@ -83,6 +83,43 @@ button.alt { background: linear-gradient(135deg, #128564, #0c6f53); }
   font-weight: 600;
 }
 
+.tab-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-btn {
+  background: #f5e6d3;
+  color: var(--ink);
+  border: 1px solid #d9c5aa;
+  box-shadow: none;
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #d05700, #bd4300);
+  color: #fff;
+  border-color: transparent;
+}
+
+.tab-panel.active {
+  animation: tabFade .18s ease;
+}
+
+@keyframes tabFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .health-line { margin-top: 10px; }
 .health-ok { color: #0f766e; font-weight: 600; }
 .health-bad { color: #b91c1c; font-weight: 600; }
@@ -135,4 +172,10 @@ thead th {
 @media (max-width: 900px) {
   h1 { font-size: 32px; }
   .two { grid-template-columns: 1fr; }
+  .tab-bar {
+    gap: 8px;
+  }
+  .tab-btn {
+    flex: 1 1 calc(50% - 8px);
+  }
 }

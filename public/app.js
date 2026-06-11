@@ -52,14 +52,29 @@ const els = {
   changePasswordForm: document.getElementById('changePasswordForm'),
   fullNameLockCard: document.getElementById('fullNameLockCard'),
   betConfirmModal: document.getElementById('betConfirmModal'),
-  betConfirmContent: document.getElementById('betConfirmContent')
+  betConfirmContent: document.getElementById('betConfirmContent'),
+  tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
+  tabPanels: Array.from(document.querySelectorAll('.tab-panel'))
 };
 let currentUser = null;
 let pendingBetPayload = null;
+let activeTabId = 'matchesTab';
 
 function setVisible(el, visible) {
   if (!el) return;
   el.classList.toggle('hidden', !visible);
+}
+
+function switchTab(tabId) {
+  activeTabId = tabId;
+  for (const button of els.tabButtons) {
+    button.classList.toggle('active', button.dataset.tab === tabId);
+  }
+  for (const panel of els.tabPanels) {
+    const isActive = panel.id === tabId;
+    panel.classList.toggle('active', isActive);
+    panel.classList.toggle('hidden', !isActive);
+  }
 }
 
 function syncNewMatchModeUI() {
@@ -921,5 +936,9 @@ refresh().catch((e) => setMessage(e.message, 'error'));
 setInterval(() => {
   renderHealth().catch(() => {});
 }, 30000);
+for (const button of els.tabButtons) {
+  button.onclick = () => switchTab(button.dataset.tab);
+}
+switchTab(activeTabId);
 document.getElementById('newBetMode').onchange = syncNewMatchModeUI;
 syncNewMatchModeUI();
