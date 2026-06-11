@@ -61,6 +61,20 @@ let currentUser = null;
 let pendingBetPayload = null;
 let activeTabId = 'openMatchesTab';
 
+function tr(key, params = {}, fallback = '') {
+  const api = window.__i18n;
+  if (api && typeof api.t === 'function') {
+    return api.t(key, params, fallback || key);
+  }
+  return fallback || key;
+}
+
+function currentLocale() {
+  const api = window.__i18n;
+  if (api && typeof api.locale === 'function') return api.locale();
+  return 'vi-VN';
+}
+
 function setVisible(el, visible) {
   if (!el) return;
   el.classList.toggle('hidden', !visible);
@@ -123,7 +137,7 @@ function showRegisterForm() {
 }
 
 function fmtTime(iso) {
-  return new Date(iso).toLocaleString('vi-VN');
+  return new Date(iso).toLocaleString(currentLocale());
 }
 
 const TEAM_FLAG_MAP = {
@@ -201,22 +215,22 @@ function matchLabel(teamA, teamB) {
 }
 
 function pickLabel(pick) {
-  if (pick === 'HOME') return 'Đội A thắng';
-  if (pick === 'DRAW') return 'Hòa';
-  return 'Đội B thắng';
+  if (pick === 'HOME') return tr('pickHomeWin', {}, 'Đội nhà thắng');
+  if (pick === 'DRAW') return tr('pickDraw', {}, 'Hòa');
+  return tr('pickAwayWin', {}, 'Đội khách thắng');
 }
 
 function marketLabel(market, line) {
-  if (market === 'HANDICAP') return `Kèo chấp (${line ?? 0})`;
-  return '1X2';
+  if (market === 'HANDICAP') return tr('marketHandicap', { line: line ?? 0 }, `Kèo chấp (${line ?? 0})`);
+  return tr('market1x2', {}, '1X2');
 }
 
 function betStatusText(status) {
-  if (status === 'won') return 'Thắng';
-  if (status === 'lost') return 'Thua';
-  if (status === 'refund') return 'Hoàn tiền';
-  if (status === 'half_won') return 'Thắng nửa';
-  if (status === 'half_lost') return 'Thua nửa';
+  if (status === 'won') return tr('betStatusWon', {}, 'Thắng');
+  if (status === 'lost') return tr('betStatusLost', {}, 'Thua');
+  if (status === 'refund') return tr('betStatusRefund', {}, 'Hoàn tiền');
+  if (status === 'half_won') return tr('betStatusHalfWon', {}, 'Thắng nửa');
+  if (status === 'half_lost') return tr('betStatusHalfLost', {}, 'Thua nửa');
   return status || '-';
 }
 
@@ -225,9 +239,9 @@ function betPickText(bet) {
     if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
     if (bet.pick === 'AWAY') return `${bet.team_b} +${bet.handicap_line ?? 0}`;
   }
-  if (bet.pick === 'HOME') return `${bet.team_a} thắng`;
-  if (bet.pick === 'DRAW') return 'Hòa';
-  return `${bet.team_b} thắng`;
+  if (bet.pick === 'HOME') return tr('betPickWin', { team: bet.team_a }, `${bet.team_a} thắng`);
+  if (bet.pick === 'DRAW') return tr('pickDraw', {}, 'Hòa');
+  return tr('betPickWin', { team: bet.team_b }, `${bet.team_b} thắng`);
 }
 
 function closeBetConfirm() {
@@ -239,11 +253,11 @@ function closeBetConfirm() {
 function openBetConfirm(payload) {
   pendingBetPayload = payload;
   els.betConfirmContent.innerHTML = `
-    <p><strong>Trận:</strong> ${payload.teamA} vs ${payload.teamB}</p>
-    <p><strong>Thể thức:</strong> ${marketLabel(payload.market, payload.handicapLine)}</p>
-    <p><strong>Lựa chọn:</strong> ${payload.pickText}</p>
-    <p><strong>Tỷ lệ:</strong> ${payload.odds}</p>
-    <p><strong>Số điểm đặt:</strong> ${payload.stake}</p>
+    <p><strong>${tr('confirmMatch', {}, 'Trận')}:</strong> ${payload.teamA} vs ${payload.teamB}</p>
+    <p><strong>${tr('confirmMarket', {}, 'Thể thức')}:</strong> ${marketLabel(payload.market, payload.handicapLine)}</p>
+    <p><strong>${tr('confirmPick', {}, 'Lựa chọn')}:</strong> ${payload.pickText}</p>
+    <p><strong>${tr('confirmOdds', {}, 'Tỷ lệ')}:</strong> ${payload.odds}</p>
+    <p><strong>${tr('confirmStake', {}, 'Số điểm đặt')}:</strong> ${payload.stake}</p>
   `;
   els.betConfirmModal.classList.remove('hidden');
 }
@@ -251,13 +265,15 @@ function openBetConfirm(payload) {
 async function renderHealth() {
   try {
     const data = await api('/api/health');
-    const updated = new Date(data.timestamp).toLocaleTimeString('vi-VN');
-    const storage = data.storage === 'supabase' ? 'Supabase Online' : 'Local file';
+    const updated = new Date(data.timestamp).toLocaleTimeString(currentLocale());
+    const storage = data.storage === 'supabase'
+      ? tr('storageSupabase', {}, 'Supabase Online')
+      : tr('storageLocal', {}, 'Local file');
     els.health.className = 'small health-line health-ok';
-    els.health.textContent = `Trạng thái hệ thống: OK | Lưu dữ liệu: ${storage} | Check lúc ${updated}`;
+    els.health.textContent = tr('healthOk', { storage, time: updated }, `Trạng thái hệ thống: OK | Lưu dữ liệu: ${storage} | Check lúc ${updated}`);
   } catch (e) {
     els.health.className = 'small health-line health-bad';
-    els.health.textContent = `Trạng thái hệ thống: Lỗi kiểm tra health (${e.message})`;
+    els.health.textContent = tr('healthError', { message: e.message }, `Trạng thái hệ thống: Lỗi kiểm tra health (${e.message})`);
   }
 }
 
@@ -279,7 +295,7 @@ async function refresh() {
     els.currentUserLabel.textContent = '';
     els.fullNameLockCard.classList.add('hidden');
     els.changePasswordForm.classList.add('hidden');
-    els.me.innerHTML = '<span class="badge">Chưa đăng nhập</span>';
+    els.me.innerHTML = `<span class="badge">${tr('notLoggedIn', {}, 'Chưa đăng nhập')}</span>`;
     await renderHealth();
     showLoginForm();
     return;
@@ -302,8 +318,8 @@ async function refresh() {
     els.adminPanel.classList.add('hidden');
   }
   const displayName = user.full_name && user.full_name.trim() ? user.full_name : user.username;
-  els.currentUserLabel.textContent = `Tài khoản: ${user.username} | Họ tên: ${displayName}`;
-  els.me.innerHTML = `<span class="badge">${displayName}</span> <span class="badge">${user.points} points</span>`;
+  els.currentUserLabel.textContent = `${tr('accountLabel', {}, 'Tài khoản')}: ${user.username} | ${tr('fullNameLabel', {}, 'Họ tên')}: ${displayName}`;
+  els.me.innerHTML = `<span class="badge">${displayName}</span> <span class="badge">${user.points} ${tr('pointsLabel', {}, 'điểm')}</span>`;
   if (!user.full_name || !user.full_name.trim()) {
     els.fullNameLockCard.classList.remove('hidden');
   } else {
@@ -312,6 +328,7 @@ async function refresh() {
 
   await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials(), renderHealth()]);
 }
+window.refresh = refresh;
 
 async function renderDailyBonusConfig() {
   try {
@@ -494,16 +511,18 @@ document.getElementById('btnSaveSpecialConfig').onclick = async () => {
 async function renderMatches() {
   const data = await api('/api/matches');
   const buildRow = (m, closed) => {
-    const result = m.result ? `KQ: ${pickLabel(m.result)}` : 'Chưa có kết quả';
+    const result = m.result
+      ? tr('resultLabel', { result: pickLabel(m.result) }, `KQ: ${pickLabel(m.result)}`)
+      : tr('resultPending', {}, 'Chưa có kết quả');
     const mode = String(m.bet_mode || '1X2');
     const odds1Cell = mode === '1X2'
-      ? `<div class="odds-block"><div>Kèo 1: ${teamLabel(m.team_a)} thắng</div><span class="small">Tỷ lệ: ${m.odds_home}</span></div>`
+      ? `<div class="odds-block"><div>${tr('odds1Text', { team: teamLabel(m.team_a) }, `Kèo 1: ${teamLabel(m.team_a)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_home }, `Tỷ lệ: ${m.odds_home}`)}</span></div>`
       : '<span class="small">-</span>';
     const oddsXCell = mode === '1X2'
-      ? `<div class="odds-block"><div>Kèo X: Hòa</div><span class="small">Tỷ lệ: ${m.odds_draw}</span></div>`
+      ? `<div class="odds-block"><div>${tr('oddsXText', {}, 'Kèo X: Hòa')}</div><span class="small">${tr('oddsRate', { value: m.odds_draw }, `Tỷ lệ: ${m.odds_draw}`)}</span></div>`
       : '<span class="small">-</span>';
     const odds2Cell = mode === '1X2'
-      ? `<div class="odds-block"><div>Kèo 2: ${teamLabel(m.team_b)} thắng</div><span class="small">Tỷ lệ: ${m.odds_away}</span></div>`
+      ? `<div class="odds-block"><div>${tr('odds2Text', { team: teamLabel(m.team_b) }, `Kèo 2: ${teamLabel(m.team_b)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_away }, `Tỷ lệ: ${m.odds_away}`)}</span></div>`
       : '<span class="small">-</span>';
 
     return `
@@ -517,10 +536,10 @@ async function renderMatches() {
         <td>${odds2Cell}</td>
         <td><span class="status-pill ${closed ? 'status-closed' : 'status-open'}">${result}</span></td>
         <td>
-          ${closed ? '<div class="bet-box closed"><span class="small">Đã đóng cược</span></div>' : `
+          ${closed ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
             ${mode === 'HANDICAP' ? `
               <div class="bet-box">
-                <div class="small bet-mode">Thể thức: Kèo chấp</div>
+                <div class="small bet-mode">${tr('betModeLabelHandicap', {}, 'Thể thức: Kèo chấp')}</div>
                 <div class="small bet-meta">${teamLabel(m.team_a)} -${m.handicap_line} (${m.odds_handicap_home}) | ${teamLabel(m.team_b)} +${m.handicap_line} (${m.odds_handicap_away})</div>
                 <div class="bet-controls">
                   <select id="hcp-pick-${m.id}">
@@ -529,20 +548,20 @@ async function renderMatches() {
                   </select>
                   <input id="hcp-stake-${m.id}" type="number" min="1" value="100" />
                 </div>
-                <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">Đặt</button>
+                <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">${tr('betAction', {}, 'Đặt')}</button>
               </div>
             ` : `
               <div class="bet-box">
-                <div class="small bet-mode">Thể thức: 1X2</div>
+                <div class="small bet-mode">${tr('betModeLabel1x2', {}, 'Thể thức: 1X2')}</div>
                 <div class="bet-controls">
                   <select id="pick-${m.id}">
                     <option value="HOME">${m.team_a}</option>
-                    <option value="DRAW">Hòa</option>
+                    <option value="DRAW">${tr('pickDraw', {}, 'Hòa')}</option>
                     <option value="AWAY">${m.team_b}</option>
                   </select>
                   <input id="stake-${m.id}" type="number" min="1" value="100" />
                 </div>
-                <button class="bet-action" onclick="placeBet(${m.id}, '1X2')">Đặt</button>
+                <button class="bet-action" onclick="placeBet(${m.id}, '1X2')">${tr('betAction', {}, 'Đặt')}</button>
               </div>
             `}
           `}
@@ -562,15 +581,15 @@ async function renderMatches() {
 
   els.openMatches.innerHTML = `
     <table class="matches-table">
-      <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
-      <tbody>${openRows || '<tr><td colspan="6" class="small">Hiện chưa có trận nào mở cược.</td></tr>'}</tbody>
+      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
+      <tbody>${openRows || `<tr><td colspan="6" class="small">${tr('openMatchesEmpty', {}, 'Hiện chưa có trận nào mở cược.')}</td></tr>`}</tbody>
     </table>
   `;
 
   els.closedMatches.innerHTML = `
     <table class="matches-table">
-      <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
-      <tbody>${closedRows || '<tr><td colspan="6" class="small">Chưa có trận nào đóng cược.</td></tr>'}</tbody>
+      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
+      <tbody>${closedRows || `<tr><td colspan="6" class="small">${tr('closedMatchesEmpty', {}, 'Chưa có trận nào đóng cược.')}</td></tr>`}</tbody>
     </table>
   `;
 }
@@ -587,7 +606,7 @@ async function renderLeaderboard() {
     </tr>
   `).join('');
 
-  els.leaderboard.innerHTML = `<table><thead><tr><th>Rank</th><th>User</th><th>Điểm đang có</th><th>Điểm đang đặt cược</th><th>Điểm tổng</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.leaderboard.innerHTML = `<table><thead><tr><th>${tr('leaderboardRank', {}, 'Rank')}</th><th>${tr('leaderboardUser', {}, 'User')}</th><th>${tr('leaderboardAvailable', {}, 'Điểm đang có')}</th><th>${tr('leaderboardOnBet', {}, 'Điểm đang đặt cược')}</th><th>${tr('leaderboardTotal', {}, 'Điểm tổng')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function renderMyBets() {
@@ -603,13 +622,13 @@ async function renderMyBets() {
       <td>${b.payout ?? '-'}</td>
       <td>
         ${(!b.result && Date.now() < new Date(b.kickoff_at).getTime() && b.status === 'open')
-          ? `<button onclick="cancelBet(${b.id})">Hủy</button>`
+          ? `<button onclick="cancelBet(${b.id})">${tr('cancelBet', {}, 'Hủy')}</button>`
           : '<span class="small">-</span>'}
       </td>
     </tr>
   `).join('');
 
-  els.myBets.innerHTML = `<table><thead><tr><th>Trận</th><th>Thể thức</th><th>Chọn</th><th>Cược</th><th>Tỷ lệ</th><th>KQ</th><th>Thưởng</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.myBets.innerHTML = `<table><thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableMode', {}, 'Thể thức')}</th><th>${tr('myBetsChoice', {}, 'Chọn')}</th><th>${tr('myBetsStake', {}, 'Cược')}</th><th>${tr('myBetsOdds', {}, 'Tỷ lệ')}</th><th>${tr('myBetsResult', {}, 'KQ')}</th><th>${tr('myBetsPayout', {}, 'Thưởng')}</th><th>${tr('myBetsAction', {}, 'Hành động')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 window.placeBet = async function (matchId, market = '1X2') {

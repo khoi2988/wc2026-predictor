@@ -1,8 +1,7 @@
 (function () {
   const LANG_STORAGE_KEY = 'wc2026_lang';
-  const current = localStorage.getItem(LANG_STORAGE_KEY) === 'en' ? 'en' : 'vi';
 
-  const text = {
+  const dict = {
     vi: {
       pageTitle: 'World Cup 2026 Predictor LAN',
       heroTitle: 'World Cup 2026 Predictor',
@@ -50,12 +49,69 @@
       betConfirmTitle: 'Xác nhận đặt cược',
       btnCancelBetConfirm: 'Xem lại',
       btnConfirmBet: 'Xác nhận đặt',
-      regFullName: 'Họ và tên',
-      currentPassword: 'Mật khẩu hiện tại',
-      newPassword: 'Mật khẩu mới (>= 6 ký tự)',
-      setFullNameInput: 'Nhập họ và tên của bạn',
-      dailyBonusPoints: 'Điểm mỗi ngày',
-      bulkPointsDelta: 'Điểm cộng/trừ'
+      placeholderFullName: 'Họ và tên',
+      placeholderCurrentPassword: 'Mật khẩu hiện tại',
+      placeholderNewPassword: 'Mật khẩu mới (>= 6 ký tự)',
+      placeholderSetFullName: 'Nhập họ và tên của bạn',
+      placeholderDailyBonusPoints: 'Điểm mỗi ngày',
+      placeholderBulkPointsDelta: 'Điểm cộng/trừ',
+      notLoggedIn: 'Chưa đăng nhập',
+      accountLabel: 'Tài khoản',
+      fullNameLabel: 'Họ tên',
+      pointsLabel: 'điểm',
+      placeholderNewBetMode1: 'Thể thức 1X2',
+      placeholderNewBetMode2: 'Thể thức kèo chấp',
+      pickHomeWin: 'Đội nhà thắng',
+      pickAwayWin: 'Đội khách thắng',
+      pickDraw: 'Hòa',
+      market1x2: '1X2',
+      marketHandicap: 'Kèo chấp ({line})',
+      betStatusWon: 'Thắng',
+      betStatusLost: 'Thua',
+      betStatusRefund: 'Hoàn tiền',
+      betStatusHalfWon: 'Thắng nửa',
+      betStatusHalfLost: 'Thua nửa',
+      betPickWin: '{team} thắng',
+      confirmMatch: 'Trận',
+      confirmMarket: 'Thể thức',
+      confirmPick: 'Lựa chọn',
+      confirmOdds: 'Tỷ lệ',
+      confirmStake: 'Số điểm đặt',
+      storageSupabase: 'Supabase Online',
+      storageLocal: 'Local file',
+      healthOk: 'Trạng thái hệ thống: OK | Lưu dữ liệu: {storage} | Check lúc {time}',
+      healthError: 'Trạng thái hệ thống: Lỗi kiểm tra health ({message})',
+      resultLabel: 'KQ: {result}',
+      resultPending: 'Chưa có kết quả',
+      odds1Text: 'Kèo 1: {team} thắng',
+      oddsXText: 'Kèo X: Hòa',
+      odds2Text: 'Kèo 2: {team} thắng',
+      oddsRate: 'Tỷ lệ: {value}',
+      statusClosedBetting: 'Đã đóng cược',
+      betModeLabel1x2: 'Thể thức: 1X2',
+      betModeLabelHandicap: 'Thể thức: Kèo chấp',
+      betAction: 'Đặt',
+      tableMatch: 'Trận',
+      tableOdds1: 'Kèo 1 (đội nhà)',
+      tableOddsX: 'Kèo X (hòa)',
+      tableOdds2: 'Kèo 2 (đội khách)',
+      tableStatus: 'Trạng thái',
+      tableBet: 'Đặt cược',
+      openMatchesEmpty: 'Hiện chưa có trận nào mở cược.',
+      closedMatchesEmpty: 'Chưa có trận nào đóng cược.',
+      leaderboardRank: 'Rank',
+      leaderboardUser: 'User',
+      leaderboardAvailable: 'Điểm đang có',
+      leaderboardOnBet: 'Điểm đang đặt cược',
+      leaderboardTotal: 'Điểm tổng',
+      tableMode: 'Thể thức',
+      myBetsChoice: 'Chọn',
+      myBetsStake: 'Cược',
+      myBetsOdds: 'Tỷ lệ',
+      myBetsResult: 'KQ',
+      myBetsPayout: 'Thưởng',
+      myBetsAction: 'Hành động',
+      cancelBet: 'Hủy'
     },
     en: {
       pageTitle: 'World Cup 2026 Predictor LAN',
@@ -104,145 +160,177 @@
       betConfirmTitle: 'Confirm bet',
       btnCancelBetConfirm: 'Review',
       btnConfirmBet: 'Confirm',
-      regFullName: 'Full name',
-      currentPassword: 'Current password',
-      newPassword: 'New password (>= 6 characters)',
-      setFullNameInput: 'Enter your full name',
-      dailyBonusPoints: 'Points per day',
-      bulkPointsDelta: 'Points to add/subtract'
+      placeholderFullName: 'Full name',
+      placeholderCurrentPassword: 'Current password',
+      placeholderNewPassword: 'New password (>= 6 characters)',
+      placeholderSetFullName: 'Enter your full name',
+      placeholderDailyBonusPoints: 'Points per day',
+      placeholderBulkPointsDelta: 'Points to add/subtract',
+      notLoggedIn: 'Not logged in',
+      accountLabel: 'Account',
+      fullNameLabel: 'Full name',
+      pointsLabel: 'points',
+      placeholderNewBetMode1: '1X2 mode',
+      placeholderNewBetMode2: 'Handicap mode',
+      pickHomeWin: 'Home team wins',
+      pickAwayWin: 'Away team wins',
+      pickDraw: 'Draw',
+      market1x2: '1X2',
+      marketHandicap: 'Handicap ({line})',
+      betStatusWon: 'Won',
+      betStatusLost: 'Lost',
+      betStatusRefund: 'Refund',
+      betStatusHalfWon: 'Half won',
+      betStatusHalfLost: 'Half lost',
+      betPickWin: '{team} wins',
+      confirmMatch: 'Match',
+      confirmMarket: 'Market',
+      confirmPick: 'Pick',
+      confirmOdds: 'Odds',
+      confirmStake: 'Stake',
+      storageSupabase: 'Supabase Online',
+      storageLocal: 'Local file',
+      healthOk: 'System status: OK | Storage: {storage} | Checked at {time}',
+      healthError: 'System status: Health check failed ({message})',
+      resultLabel: 'Result: {result}',
+      resultPending: 'No result yet',
+      odds1Text: '1: {team} wins',
+      oddsXText: 'X: Draw',
+      odds2Text: '2: {team} wins',
+      oddsRate: 'Odds: {value}',
+      statusClosedBetting: 'Betting closed',
+      betModeLabel1x2: 'Mode: 1X2',
+      betModeLabelHandicap: 'Mode: Handicap',
+      betAction: 'Bet',
+      tableMatch: 'Match',
+      tableOdds1: '1 (home)',
+      tableOddsX: 'X (draw)',
+      tableOdds2: '2 (away)',
+      tableStatus: 'Status',
+      tableBet: 'Bet',
+      openMatchesEmpty: 'There are no matches currently open for betting.',
+      closedMatchesEmpty: 'There are no closed matches yet.',
+      leaderboardRank: 'Rank',
+      leaderboardUser: 'User',
+      leaderboardAvailable: 'Available points',
+      leaderboardOnBet: 'Points on bet',
+      leaderboardTotal: 'Total points',
+      tableMode: 'Mode',
+      myBetsChoice: 'Pick',
+      myBetsStake: 'Stake',
+      myBetsOdds: 'Odds',
+      myBetsResult: 'Result',
+      myBetsPayout: 'Payout',
+      myBetsAction: 'Action',
+      cancelBet: 'Cancel'
     }
   };
 
-  function lang() {
+  function getLang() {
     return localStorage.getItem(LANG_STORAGE_KEY) === 'en' ? 'en' : 'vi';
   }
 
-  function tr(key) {
-    return text[lang()][key] || text.vi[key] || key;
+  function t(key, params = {}, fallback = key) {
+    let value = dict[getLang()][key] || dict.vi[key] || fallback;
+    for (const [name, v] of Object.entries(params)) {
+      value = value.replaceAll(`{${name}}`, String(v));
+    }
+    return value;
   }
 
-  function setText(id, value) {
+  function locale() {
+    return getLang() === 'en' ? 'en-US' : 'vi-VN';
+  }
+
+  function setText(id, key) {
     const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    if (el) el.textContent = t(key);
   }
 
-  function setPlaceholder(id, value) {
+  function setPlaceholder(id, key) {
     const el = document.getElementById(id);
-    if (el) el.placeholder = value;
+    if (el) el.placeholder = t(key);
   }
 
-  function replaceCommonText(root) {
-    if (!root) return;
-    const html = root.innerHTML
-      .replaceAll('Các trận đang cho cược', tr('tabOpenMatches'))
-      .replaceAll('Các trận đã đóng cược', tr('tabClosedMatches'))
-      .replaceAll('Bảng xếp hạng', tr('tabLeaderboard'))
-      .replaceAll('Lịch sử cược', tr('tabMyBets'))
-      .replaceAll('Dự đoán vui', tr('tabSpecials'))
-      .replaceAll('Đặt cược', lang() === 'en' ? 'Bet' : 'Đặt cược')
-      .replaceAll('Trạng thái', lang() === 'en' ? 'Status' : 'Trạng thái')
-      .replaceAll('Thể thức', lang() === 'en' ? 'Mode' : 'Thể thức')
-      .replaceAll('Hành động', lang() === 'en' ? 'Action' : 'Hành động')
-      .replaceAll('Thưởng', lang() === 'en' ? 'Payout' : 'Thưởng')
-      .replaceAll('Tỷ lệ', lang() === 'en' ? 'Odds' : 'Tỷ lệ')
-      .replaceAll('Cược của tôi', tr('myBetsTitle'))
-      .replaceAll('Dự đoán của tôi', tr('mySpecialPicksTitle'))
-      .replaceAll('Đã đóng cược', lang() === 'en' ? 'Betting closed' : 'Đã đóng cược')
-      .replaceAll('Chưa có kết quả', lang() === 'en' ? 'No result yet' : 'Chưa có kết quả')
-      .replaceAll('Hủy', lang() === 'en' ? 'Cancel' : 'Hủy')
-      .replaceAll('Đặt', lang() === 'en' ? 'Bet' : 'Đặt')
-      .replaceAll('Thắng nửa', lang() === 'en' ? 'Half won' : 'Thắng nửa')
-      .replaceAll('Thắng', lang() === 'en' ? 'Won' : 'Thắng')
-      .replaceAll('Thua nửa', lang() === 'en' ? 'Half lost' : 'Thua nửa')
-      .replaceAll('Thua', lang() === 'en' ? 'Lost' : 'Thua')
-      .replaceAll('Hoàn tiền', lang() === 'en' ? 'Refund' : 'Hoàn tiền')
-      .replaceAll('Hòa', lang() === 'en' ? 'Draw' : 'Hòa')
-      .replaceAll('Điểm đang có', lang() === 'en' ? 'Available points' : 'Điểm đang có')
-      .replaceAll('Điểm đang đặt cược', lang() === 'en' ? 'Points on bet' : 'Điểm đang đặt cược')
-      .replaceAll('Điểm tổng', lang() === 'en' ? 'Total points' : 'Điểm tổng');
-    if (html !== root.innerHTML) root.innerHTML = html;
-  }
+  function applyStatic() {
+    document.documentElement.lang = getLang();
+    document.title = t('pageTitle');
+    setText('heroTitle', 'heroTitle');
+    setText('heroSubtitle', 'heroSubtitle');
+    setText('loginTitle', 'loginTitle');
+    setText('btnLogin', 'loginButton');
+    setText('loginHint', 'loginHint');
+    setText('showRegister', 'registerLink');
+    setText('registerTitle', 'registerTitle');
+    setText('btnRegister', 'registerButton');
+    setText('registerRule', 'registerRule');
+    setText('registerHint', 'registerHint');
+    setText('showLogin', 'loginLink');
+    setText('tabOpenMatches', 'tabOpenMatches');
+    setText('tabClosedMatches', 'tabClosedMatches');
+    setText('tabLeaderboard', 'tabLeaderboard');
+    setText('tabMyBets', 'tabMyBets');
+    setText('tabSpecials', 'tabSpecials');
+    setText('openMatchesTitle', 'openMatchesTitle');
+    setText('closedMatchesTitle', 'closedMatchesTitle');
+    setText('leaderboardTitle', 'leaderboardTitle');
+    setText('myBetsTitle', 'myBetsTitle');
+    setText('specialsTitle', 'specialsTitle');
+    setText('mySpecialPicksTitle', 'mySpecialPicksTitle');
+    setText('adminPanelTitle', 'adminPanelTitle');
+    setText('dailyBonusTitle', 'dailyBonusTitle');
+    setText('dailyBonusEnabledLabel', 'dailyBonusEnabledLabel');
+    setText('btnSaveDailyBonus', 'btnSaveDailyBonus');
+    setText('btnAdminLoad', 'btnAdminLoad');
+    setText('btnAdminLoadUsers', 'btnAdminLoadUsers');
+    setText('btnAddMatch', 'btnAddMatch');
+    setText('adminSpecialsTitle', 'adminSpecialsTitle');
+    setText('adminSpecialManualLockLabel', 'adminSpecialManualLockLabel');
+    setText('btnSaveSpecialConfig', 'btnSaveSpecialConfig');
+    setText('adminUsersTitle', 'adminUsersTitle');
+    setText('btnBulkAddPoints', 'btnBulkAddPoints');
+    setText('btnBulkSubtractPoints', 'btnBulkSubtractPoints');
+    setText('btnResetAllPoints', 'btnResetAllPoints');
+    setText('btnShowChangePassword', 'btnShowChangePassword');
+    setText('btnLogout', 'btnLogout');
+    setText('btnChangePassword', 'btnChangePassword');
+    setText('fullNameLockTitle', 'fullNameLockTitle');
+    setText('btnSetFullName', 'btnSetFullName');
+    setText('fullNameLockHint', 'fullNameLockHint');
+    setText('betConfirmTitle', 'betConfirmTitle');
+    setText('btnCancelBetConfirm', 'btnCancelBetConfirm');
+    setText('btnConfirmBet', 'btnConfirmBet');
 
-  function applyLanguage() {
-    document.documentElement.lang = lang();
-    document.title = tr('pageTitle');
-
-    setText('heroTitle', tr('heroTitle'));
-    setText('heroSubtitle', tr('heroSubtitle'));
-    setText('loginTitle', tr('loginTitle'));
-    setText('btnLogin', tr('loginButton'));
-    setText('loginHint', tr('loginHint'));
-    setText('showRegister', tr('registerLink'));
-    setText('registerTitle', tr('registerTitle'));
-    setText('btnRegister', tr('registerButton'));
-    setText('registerRule', tr('registerRule'));
-    setText('registerHint', tr('registerHint'));
-    setText('showLogin', tr('loginLink'));
-    setText('tabOpenMatches', tr('tabOpenMatches'));
-    setText('tabClosedMatches', tr('tabClosedMatches'));
-    setText('tabLeaderboard', tr('tabLeaderboard'));
-    setText('tabMyBets', tr('tabMyBets'));
-    setText('tabSpecials', tr('tabSpecials'));
-    setText('openMatchesTitle', tr('openMatchesTitle'));
-    setText('closedMatchesTitle', tr('closedMatchesTitle'));
-    setText('leaderboardTitle', tr('leaderboardTitle'));
-    setText('myBetsTitle', tr('myBetsTitle'));
-    setText('specialsTitle', tr('specialsTitle'));
-    setText('mySpecialPicksTitle', tr('mySpecialPicksTitle'));
-    setText('adminPanelTitle', tr('adminPanelTitle'));
-    setText('dailyBonusTitle', tr('dailyBonusTitle'));
-    setText('dailyBonusEnabledLabel', tr('dailyBonusEnabledLabel'));
-    setText('btnSaveDailyBonus', tr('btnSaveDailyBonus'));
-    setText('btnAdminLoad', tr('btnAdminLoad'));
-    setText('btnAdminLoadUsers', tr('btnAdminLoadUsers'));
-    setText('btnAddMatch', tr('btnAddMatch'));
-    setText('adminSpecialsTitle', tr('adminSpecialsTitle'));
-    setText('adminSpecialManualLockLabel', tr('adminSpecialManualLockLabel'));
-    setText('btnSaveSpecialConfig', tr('btnSaveSpecialConfig'));
-    setText('adminUsersTitle', tr('adminUsersTitle'));
-    setText('btnBulkAddPoints', tr('btnBulkAddPoints'));
-    setText('btnBulkSubtractPoints', tr('btnBulkSubtractPoints'));
-    setText('btnResetAllPoints', tr('btnResetAllPoints'));
-    setText('btnShowChangePassword', tr('btnShowChangePassword'));
-    setText('btnLogout', tr('btnLogout'));
-    setText('btnChangePassword', tr('btnChangePassword'));
-    setText('fullNameLockTitle', tr('fullNameLockTitle'));
-    setText('btnSetFullName', tr('btnSetFullName'));
-    setText('fullNameLockHint', tr('fullNameLockHint'));
-    setText('betConfirmTitle', tr('betConfirmTitle'));
-    setText('btnCancelBetConfirm', tr('btnCancelBetConfirm'));
-    setText('btnConfirmBet', tr('btnConfirmBet'));
-
-    setPlaceholder('regFullName', tr('regFullName'));
-    setPlaceholder('currentPassword', tr('currentPassword'));
-    setPlaceholder('newPassword', tr('newPassword'));
-    setPlaceholder('setFullNameInput', tr('setFullNameInput'));
-    setPlaceholder('dailyBonusPoints', tr('dailyBonusPoints'));
-    setPlaceholder('bulkPointsDelta', tr('bulkPointsDelta'));
+    setPlaceholder('regFullName', 'placeholderFullName');
+    setPlaceholder('currentPassword', 'placeholderCurrentPassword');
+    setPlaceholder('newPassword', 'placeholderNewPassword');
+    setPlaceholder('setFullNameInput', 'placeholderSetFullName');
+    setPlaceholder('dailyBonusPoints', 'placeholderDailyBonusPoints');
+    setPlaceholder('bulkPointsDelta', 'placeholderBulkPointsDelta');
 
     const betMode = document.getElementById('newBetMode');
-    if (betMode?.options?.[0]) betMode.options[0].text = lang() === 'en' ? '1X2 mode' : 'Thể thức 1X2';
-    if (betMode?.options?.[1]) betMode.options[1].text = lang() === 'en' ? 'Handicap mode' : 'Thể thức kèo chấp';
+    if (betMode?.options?.[0]) betMode.options[0].text = t('placeholderNewBetMode1');
+    if (betMode?.options?.[1]) betMode.options[1].text = t('placeholderNewBetMode2');
 
     document.querySelectorAll('.lang-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.lang === lang());
+      btn.classList.toggle('active', btn.dataset.lang === getLang());
     });
-
-    replaceCommonText(document.body);
   }
 
+  window.__i18n = { getLang, t, locale };
+
   document.querySelectorAll('.lang-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       localStorage.setItem(LANG_STORAGE_KEY, btn.dataset.lang === 'en' ? 'en' : 'vi');
-      applyLanguage();
+      applyStatic();
+      if (typeof window.refresh === 'function') {
+        try { await window.refresh(); } catch (_) {}
+      }
     });
   });
 
-  const observer = new MutationObserver(() => {
-    clearTimeout(window.__wc2026I18nTimer);
-    window.__wc2026I18nTimer = setTimeout(applyLanguage, 40);
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
-  applyLanguage();
+  applyStatic();
+  if (typeof window.refresh === 'function') {
+    window.refresh().catch(() => {});
+  }
 })();
