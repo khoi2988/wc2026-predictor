@@ -139,12 +139,21 @@ thead th {
   top: 0;
 }
 
-.matches-table th:nth-child(1) { width: 20%; }
+.matches-table {
+  table-layout: fixed;
+}
+
+.matches-table th:nth-child(1) { width: 22%; }
 .matches-table th:nth-child(2),
 .matches-table th:nth-child(3),
-.matches-table th:nth-child(4) { width: 18%; }
-.matches-table th:nth-child(5) { width: 10%; }
-.matches-table th:nth-child(6) { width: 16%; }
+.matches-table th:nth-child(4) { width: 16%; }
+.matches-table th:nth-child(5) { width: 9%; }
+.matches-table th:nth-child(6) { width: 21%; }
+
+.matches-table td:nth-child(5),
+.matches-table th:nth-child(5) {
+  text-align: center;
+}
 
 .match-title {
   font-weight: 700;
@@ -153,12 +162,13 @@ thead th {
 
 .match-pair {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .team-line {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .match-vs {
@@ -171,7 +181,7 @@ thead th {
 }
 
 .match-kickoff {
-  margin-top: 4px;
+  margin-top: 6px;
   color: #42515b;
 }
 
@@ -183,10 +193,13 @@ thead th {
   white-space: nowrap;
   min-width: 0;
   flex: 0 1 auto;
+  max-width: 100%;
 }
 
 .team-name span:last-child {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .team-flag {
@@ -205,6 +218,10 @@ thead th {
   line-height: 1.45;
 }
 
+.odds-block > div:first-child {
+  min-height: 44px;
+}
+
 .odds-block .team-name {
   vertical-align: middle;
 }
@@ -215,6 +232,7 @@ thead th {
   border-radius: 999px;
   font-weight: 600;
   line-height: 1.4;
+  text-align: center;
 }
 
 .status-open {
@@ -230,11 +248,15 @@ thead th {
 .bet-box {
   display: grid;
   gap: 8px;
-  min-width: 210px;
+  min-width: 0;
+  width: 100%;
+  max-width: 240px;
+  margin-left: auto;
 }
 
 .bet-box.closed {
   min-width: 0;
+  margin-left: 0;
 }
 
 .bet-mode {
@@ -264,6 +286,7 @@ thead th {
 
 .bet-action {
   width: 100%;
+  min-width: 0;
 }
 
 .small { font-size: 12px; opacity: .9; }
@@ -316,7 +339,15 @@ thead th {
     width: 100%;
     flex: 1 1 auto;
   }
-  .match-title {
-    gap: 6px;
+  .matches-table {
+    table-layout: auto;
+  }
+  .matches-table th:nth-child(1),
+  .matches-table th:nth-child(2),
+  .matches-table th:nth-child(3),
+  .matches-table th:nth-child(4),
+  .matches-table th:nth-child(5),
+  .matches-table th:nth-child(6) {
+    width: auto;
   }
 }
