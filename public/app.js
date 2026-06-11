@@ -7,10 +7,19 @@
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401) {
-      throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      if (data.error === 'Invalid credentials.') {
+        throw new Error('Sai tên đăng nhập hoặc mật khẩu.');
+      }
+      if (data.error === 'Unauthorized') {
+        throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      }
+      throw new Error(data.error || 'Yêu cầu đăng nhập lại.');
     }
     if (res.status === 403) {
-      throw new Error('Bạn không có quyền thao tác chức năng này.');
+      if (data.error === 'Forbidden') {
+        throw new Error('Bạn không có quyền thao tác chức năng này.');
+      }
+      throw new Error(data.error || 'Bạn không có quyền thao tác chức năng này.');
     }
     throw new Error(data.error || 'Request failed');
   }

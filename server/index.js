@@ -731,7 +731,7 @@ app.post('/api/login', async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
-  const user = db.users.find((u) => u.username === username);
+  const user = db.users.find((u) => u.username.toLowerCase() === username.toLowerCase());
   if (!user) return res.status(401).json({ error: 'Invalid credentials.' });
 
   const ok = await bcrypt.compare(password, user.password_hash);
