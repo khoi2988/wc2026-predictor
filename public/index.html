@@ -46,15 +46,21 @@
     <div id="main" class="grid hidden">
       <div class="card">
         <div class="tab-bar">
-          <button class="tab-btn active" data-tab="matchesTab">Trận & đặt cược</button>
+          <button class="tab-btn active" data-tab="openMatchesTab">Các trận đang cho cược</button>
+          <button class="tab-btn" data-tab="closedMatchesTab">Các trận đã đóng cược</button>
           <button class="tab-btn" data-tab="leaderboardTab">Bảng xếp hạng</button>
           <button class="tab-btn" data-tab="myBetsTab">Lịch sử cược</button>
           <button class="tab-btn" data-tab="specialsTab">Dự đoán vui</button>
         </div>
 
-        <div id="matchesTab" class="tab-panel active">
-          <h2>Danh sách trận & đặt cược</h2>
-          <div id="matches"></div>
+        <div id="openMatchesTab" class="tab-panel active">
+          <h2>Các trận đang cho cược</h2>
+          <div id="openMatches"></div>
+        </div>
+
+        <div id="closedMatchesTab" class="tab-panel hidden">
+          <h2>Các trận đã đóng cược</h2>
+          <div id="closedMatches"></div>
         </div>
 
         <div id="leaderboardTab" class="tab-panel hidden">

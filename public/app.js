@@ -33,7 +33,8 @@ const els = {
   main: document.getElementById('main'),
   me: document.getElementById('me'),
   msg: document.getElementById('msg'),
-  matches: document.getElementById('matches'),
+  openMatches: document.getElementById('openMatches'),
+  closedMatches: document.getElementById('closedMatches'),
   leaderboard: document.getElementById('leaderboard'),
   myBets: document.getElementById('myBets'),
   specialMarkets: document.getElementById('specialMarkets'),
@@ -58,7 +59,7 @@ const els = {
 };
 let currentUser = null;
 let pendingBetPayload = null;
-let activeTabId = 'matchesTab';
+let activeTabId = 'openMatchesTab';
 
 function setVisible(el, visible) {
   if (!el) return;
@@ -418,9 +419,8 @@ document.getElementById('btnSaveSpecialConfig').onclick = async () => {
 
 async function renderMatches() {
   const data = await api('/api/matches');
-  const rows = data.matches.map((m) => {
+  const buildRow = (m, closed) => {
     const result = m.result ? `KQ: ${pickLabel(m.result)}` : 'Chưa có kết quả';
-    const closed = Date.now() >= new Date(m.kickoff_at).getTime() || m.result;
     const mode = String(m.bet_mode || '1X2');
     const odds1Cell = mode === '1X2'
       ? `Kèo 1: Đội ${m.team_a} thắng<br><span class="small">Tỷ lệ: ${m.odds_home}</span>`
@@ -464,12 +464,28 @@ async function renderMatches() {
         </td>
       </tr>
     `;
-  }).join('');
+  };
 
-  els.matches.innerHTML = `
+  const openRows = data.matches
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result)
+    .map((m) => buildRow(m, false))
+    .join('');
+  const closedRows = data.matches
+    .filter((m) => Date.now() >= new Date(m.kickoff_at).getTime() || m.result)
+    .map((m) => buildRow(m, true))
+    .join('');
+
+  els.openMatches.innerHTML = `
     <table>
       <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody>${openRows || '<tr><td colspan="6" class="small">Hiện chưa có trận nào mở cược.</td></tr>'}</tbody>
+    </table>
+  `;
+
+  els.closedMatches.innerHTML = `
+    <table>
+      <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
+      <tbody>${closedRows || '<tr><td colspan="6" class="small">Chưa có trận nào đóng cược.</td></tr>'}</tbody>
     </table>
   `;
 }
