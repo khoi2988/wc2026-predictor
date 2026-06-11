@@ -603,7 +603,7 @@ async function renderMyBets() {
       <td>${b.payout ?? '-'}</td>
       <td>
         ${(!b.result && Date.now() < new Date(b.kickoff_at).getTime() && b.status === 'open')
-          ? `<button onclick="cancelBet(${b.id})">Rút</button>`
+          ? `<button onclick="cancelBet(${b.id})">Hủy</button>`
           : '<span class="small">-</span>'}
       </td>
     </tr>
