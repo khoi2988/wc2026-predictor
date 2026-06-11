@@ -9,33 +9,41 @@
 <body>
   <div class="container grid">
     <div class="card">
-      <h1>World Cup 2026 Predictor</h1>
-      <p class="small">Game vui nội bộ: mỗi người có điểm ban đầu, đặt cược theo tỷ lệ và leo bảng xếp hạng.</p>
+      <div class="hero-head">
+        <div>
+          <h1 id="heroTitle">World Cup 2026 Predictor</h1>
+          <p id="heroSubtitle" class="small">Game vui nội bộ: mỗi người có điểm ban đầu, đặt cược theo tỷ lệ và leo bảng xếp hạng.</p>
+        </div>
+        <div class="lang-switch" id="langSwitch">
+          <button type="button" class="lang-btn active" data-lang="vi">VI</button>
+          <button type="button" class="lang-btn" data-lang="en">EN</button>
+        </div>
+      </div>
       <div id="me"></div>
       <div id="health" class="small health-line"></div>
     </div>
 
     <div id="auth" class="card">
       <div id="loginForm">
-        <h2>Đăng nhập</h2>
+        <h2 id="loginTitle">Đăng nhập</h2>
         <div class="row">
           <input id="loginUser" placeholder="username" />
           <input id="loginPass" type="password" placeholder="password" />
           <button id="btnLogin" class="alt">Vào chơi</button>
         </div>
-        <p class="small">Chưa có tài khoản? <a href="#" id="showRegister">Đăng ký</a></p>
+        <p class="small"><span id="loginHint">Chưa có tài khoản?</span> <a href="#" id="showRegister">Đăng ký</a></p>
       </div>
 
       <div id="registerForm" class="hidden">
-        <h2>Đăng ký</h2>
+        <h2 id="registerTitle">Đăng ký</h2>
         <div class="row">
           <input id="regFullName" placeholder="Họ và tên" />
           <input id="regUser" placeholder="username" />
           <input id="regPass" type="password" placeholder="password" />
           <button id="btnRegister">Tạo tài khoản</button>
         </div>
-        <p class="small">Yêu cầu: username 3-24 ký tự, password tối thiểu 6 ký tự.</p>
-        <p class="small">Đã có tài khoản? <a href="#" id="showLogin">Đăng nhập</a></p>
+        <p id="registerRule" class="small">Yêu cầu: username 3-24 ký tự, password tối thiểu 6 ký tự.</p>
+        <p class="small"><span id="registerHint">Đã có tài khoản?</span> <a href="#" id="showLogin">Đăng nhập</a></p>
       </div>
     </div>
 
@@ -46,47 +54,47 @@
     <div id="main" class="grid hidden">
       <div class="card">
         <div class="tab-bar">
-          <button class="tab-btn active" data-tab="openMatchesTab">Các trận đang cho cược</button>
-          <button class="tab-btn" data-tab="closedMatchesTab">Các trận đã đóng cược</button>
-          <button class="tab-btn" data-tab="leaderboardTab">Bảng xếp hạng</button>
-          <button class="tab-btn" data-tab="myBetsTab">Lịch sử cược</button>
-          <button class="tab-btn" data-tab="specialsTab">Dự đoán vui</button>
+          <button class="tab-btn active" data-tab="openMatchesTab" id="tabOpenMatches">Các trận đang cho cược</button>
+          <button class="tab-btn" data-tab="closedMatchesTab" id="tabClosedMatches">Các trận đã đóng cược</button>
+          <button class="tab-btn" data-tab="leaderboardTab" id="tabLeaderboard">Bảng xếp hạng</button>
+          <button class="tab-btn" data-tab="myBetsTab" id="tabMyBets">Lịch sử cược</button>
+          <button class="tab-btn" data-tab="specialsTab" id="tabSpecials">Dự đoán vui</button>
         </div>
 
         <div id="openMatchesTab" class="tab-panel active">
-          <h2>Các trận đang cho cược</h2>
+          <h2 id="openMatchesTitle">Các trận đang cho cược</h2>
           <div id="openMatches"></div>
         </div>
 
         <div id="closedMatchesTab" class="tab-panel hidden">
-          <h2>Các trận đã đóng cược</h2>
+          <h2 id="closedMatchesTitle">Các trận đã đóng cược</h2>
           <div id="closedMatches"></div>
         </div>
 
         <div id="leaderboardTab" class="tab-panel hidden">
-          <h2>Bảng xếp hạng</h2>
+          <h2 id="leaderboardTitle">Bảng xếp hạng</h2>
           <div id="leaderboard"></div>
         </div>
 
         <div id="myBetsTab" class="tab-panel hidden">
-          <h2>Cược của tôi</h2>
+          <h2 id="myBetsTitle">Cược của tôi</h2>
           <div id="myBets"></div>
         </div>
 
         <div id="specialsTab" class="tab-panel hidden">
-          <h2>Dự đoán vui World Cup</h2>
+          <h2 id="specialsTitle">Dự đoán vui World Cup</h2>
           <div id="specialMarkets"></div>
-          <h3>Dự đoán của tôi</h3>
+          <h3 id="mySpecialPicksTitle">Dự đoán của tôi</h3>
           <div id="mySpecialPicks"></div>
         </div>
       </div>
 
       <div id="adminPanel" class="card hidden">
-        <h2>Bảng vận hành (Admin/Operator)</h2>
+        <h2 id="adminPanelTitle">Bảng vận hành (Admin/Operator)</h2>
         <div id="adminOnlyDailyBonus">
-          <h3>Điểm cộng mỗi ngày</h3>
+          <h3 id="dailyBonusTitle">Điểm cộng mỗi ngày</h3>
           <div class="row">
-            <label><input id="dailyBonusEnabled" type="checkbox" /> Bật cộng điểm tự động</label>
+            <label><input id="dailyBonusEnabled" type="checkbox" /> <span id="dailyBonusEnabledLabel">Bật cộng điểm tự động</span></label>
             <input id="dailyBonusStartDate" type="date" />
             <input id="dailyBonusPoints" type="number" step="1" min="1" placeholder="Điểm mỗi ngày" />
             <button id="btnSaveDailyBonus">Lưu cấu hình</button>
@@ -116,15 +124,15 @@
         </div>
         <div id="adminMatches"></div>
         <div id="adminOnlyExtra">
-          <h3>Chốt dự đoán vui</h3>
+          <h3 id="adminSpecialsTitle">Chốt dự đoán vui</h3>
           <div id="adminSpecialsStatus" class="small"></div>
           <div class="row">
             <input id="adminSpecialDeadline" type="datetime-local" />
-            <label><input id="adminSpecialManualLock" type="checkbox" /> Khóa thủ công</label>
+            <label><input id="adminSpecialManualLock" type="checkbox" /> <span id="adminSpecialManualLockLabel">Khóa thủ công</span></label>
             <button id="btnSaveSpecialConfig" class="alt">Lưu hạn dự đoán vui</button>
           </div>
           <div id="adminSpecials"></div>
-          <h3>Quản lý điểm người chơi</h3>
+          <h3 id="adminUsersTitle">Quản lý điểm người chơi</h3>
           <div class="row">
             <input id="bulkPointsDelta" type="number" step="1" value="100" style="width:140px" placeholder="Điểm cộng/trừ" />
             <button id="btnBulkAddPoints">Cộng điểm cho toàn bộ user</button>
@@ -149,12 +157,12 @@
       </div>
 
       <div id="fullNameLockCard" class="card hidden">
-        <h2>Cập nhật họ và tên (chỉ 1 lần)</h2>
+        <h2 id="fullNameLockTitle">Cập nhật họ và tên (chỉ 1 lần)</h2>
         <div class="row">
           <input id="setFullNameInput" placeholder="Nhập họ và tên của bạn" />
           <button id="btnSetFullName" class="alt">Lưu và khóa</button>
         </div>
-        <p class="small">Sau khi lưu, bạn sẽ không thể chỉnh sửa lại.</p>
+        <p id="fullNameLockHint" class="small">Sau khi lưu, bạn sẽ không thể chỉnh sửa lại.</p>
       </div>
 
     </div>
@@ -163,7 +171,7 @@
   <div id="betConfirmModal" class="modal hidden">
     <div class="modal-backdrop" id="betConfirmBackdrop"></div>
     <div class="modal-card">
-      <h2>Xác nhận đặt cược</h2>
+      <h2 id="betConfirmTitle">Xác nhận đặt cược</h2>
       <div id="betConfirmContent" class="small"></div>
       <div class="row">
         <button id="btnCancelBetConfirm" class="alt">Xem lại</button>
@@ -173,5 +181,6 @@
   </div>
 
   <script src="/app.js"></script>
+  <script src="/i18n.js"></script>
 </body>
 </html>

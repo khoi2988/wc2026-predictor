@@ -33,6 +33,13 @@ body {
   box-shadow: 0 14px 30px rgba(23, 24, 26, 0.08);
 }
 
+.hero-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 h1, h2, h3 {
   margin: 0 0 12px;
   letter-spacing: 0.2px;
@@ -90,6 +97,29 @@ button.alt { background: linear-gradient(135deg, #128564, #0c6f53); }
   margin-bottom: 18px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
+}
+
+.lang-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.lang-btn {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.lang-btn.active {
+  background: linear-gradient(135deg, #128564, #0c6f53);
+  color: #fff;
 }
 
 .tab-btn {
@@ -322,6 +352,10 @@ thead th {
 @media (max-width: 900px) {
   h1 { font-size: 32px; }
   .two { grid-template-columns: 1fr; }
+  .hero-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
   .tab-bar {
     gap: 8px;
   }
