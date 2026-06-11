@@ -126,6 +126,74 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleString('vi-VN');
 }
 
+const TEAM_FLAG_MAP = {
+  argentina: '🇦🇷',
+  australia: '🇦🇺',
+  belgium: '🇧🇪',
+  bosnia: '🇧🇦',
+  'bosnia and herzegovina': '🇧🇦',
+  brazil: '🇧🇷',
+  cameroon: '🇨🇲',
+  canada: '🇨🇦',
+  croatia: '🇭🇷',
+  'costa rica': '🇨🇷',
+  'czech republic': '🇨🇿',
+  czechia: '🇨🇿',
+  denmark: '🇩🇰',
+  ecuador: '🇪🇨',
+  england: '🏴',
+  france: '🇫🇷',
+  germany: '🇩🇪',
+  ghana: '🇬🇭',
+  haiti: '🇭🇹',
+  iran: '🇮🇷',
+  japan: '🇯🇵',
+  mexico: '🇲🇽',
+  morocco: '🇲🇦',
+  netherlands: '🇳🇱',
+  paraguay: '🇵🇾',
+  peru: '🇵🇪',
+  poland: '🇵🇱',
+  portugal: '🇵🇹',
+  qatar: '🇶🇦',
+  'saudi arabia': '🇸🇦',
+  scotland: '🏴',
+  senegal: '🇸🇳',
+  serbia: '🇷🇸',
+  'south africa': '🇿🇦',
+  'south korea': '🇰🇷',
+  korea: '🇰🇷',
+  spain: '🇪🇸',
+  switzerland: '🇨🇭',
+  tunisia: '🇹🇳',
+  turkey: '🇹🇷',
+  usa: '🇺🇸',
+  'united states': '🇺🇸',
+  uruguay: '🇺🇾',
+  wales: '🏴'
+};
+
+function normalizeTeamKey(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function teamFlag(name) {
+  return TEAM_FLAG_MAP[normalizeTeamKey(name)] || '';
+}
+
+function teamLabel(name) {
+  const flag = teamFlag(name);
+  return `<span class="team-name">${flag ? `<span class="team-flag">${flag}</span>` : ''}<span>${name}</span></span>`;
+}
+
+function matchLabel(teamA, teamB) {
+  return `${teamLabel(teamA)} <span class="match-vs">vs</span> ${teamLabel(teamB)}`;
+}
+
 function pickLabel(pick) {
   if (pick === 'HOME') return 'Đội A thắng';
   if (pick === 'DRAW') return 'Hòa';
@@ -423,42 +491,53 @@ async function renderMatches() {
     const result = m.result ? `KQ: ${pickLabel(m.result)}` : 'Chưa có kết quả';
     const mode = String(m.bet_mode || '1X2');
     const odds1Cell = mode === '1X2'
-      ? `Kèo 1: Đội ${m.team_a} thắng<br><span class="small">Tỷ lệ: ${m.odds_home}</span>`
+      ? `<div class="odds-block"><div>Kèo 1: ${teamLabel(m.team_a)} thắng</div><span class="small">Tỷ lệ: ${m.odds_home}</span></div>`
       : '<span class="small">-</span>';
     const oddsXCell = mode === '1X2'
-      ? `Kèo X: Hòa<br><span class="small">Tỷ lệ: ${m.odds_draw}</span>`
+      ? `<div class="odds-block"><div>Kèo X: Hòa</div><span class="small">Tỷ lệ: ${m.odds_draw}</span></div>`
       : '<span class="small">-</span>';
     const odds2Cell = mode === '1X2'
-      ? `Kèo 2: Đội ${m.team_b} thắng<br><span class="small">Tỷ lệ: ${m.odds_away}</span>`
+      ? `<div class="odds-block"><div>Kèo 2: ${teamLabel(m.team_b)} thắng</div><span class="small">Tỷ lệ: ${m.odds_away}</span></div>`
       : '<span class="small">-</span>';
 
     return `
       <tr>
-        <td>${m.team_a} vs ${m.team_b}<br><span class="small">${fmtTime(m.kickoff_at)}</span></td>
+        <td>
+          <div class="match-title">${matchLabel(m.team_a, m.team_b)}</div>
+          <div class="small match-kickoff">${fmtTime(m.kickoff_at)}</div>
+        </td>
         <td>${odds1Cell}</td>
         <td>${oddsXCell}</td>
         <td>${odds2Cell}</td>
-        <td>${result}</td>
+        <td><span class="status-pill ${closed ? 'status-closed' : 'status-open'}">${result}</span></td>
         <td>
-          ${closed ? '<span class="small">Đã đóng</span>' : `
+          ${closed ? '<div class="bet-box closed"><span class="small">Đã đóng cược</span></div>' : `
             ${mode === 'HANDICAP' ? `
-              <span class="small">Thể thức: Kèo chấp</span><br>
-              <span class="small">${m.team_a} -${m.handicap_line} (${m.odds_handicap_home}) | ${m.team_b} +${m.handicap_line} (${m.odds_handicap_away})</span><br>
-              <select id="hcp-pick-${m.id}">
-                <option value="HOME">${m.team_a} -${m.handicap_line}</option>
-                <option value="AWAY">${m.team_b} +${m.handicap_line}</option>
-              </select>
-              <input id="hcp-stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
-              <button onclick="placeBet(${m.id}, 'HANDICAP')">Đặt kèo chấp</button>
+              <div class="bet-box">
+                <div class="small bet-mode">Thể thức: Kèo chấp</div>
+                <div class="small bet-meta">${teamLabel(m.team_a)} -${m.handicap_line} (${m.odds_handicap_home}) | ${teamLabel(m.team_b)} +${m.handicap_line} (${m.odds_handicap_away})</div>
+                <div class="bet-controls">
+                  <select id="hcp-pick-${m.id}">
+                    <option value="HOME">${m.team_a} -${m.handicap_line}</option>
+                    <option value="AWAY">${m.team_b} +${m.handicap_line}</option>
+                  </select>
+                  <input id="hcp-stake-${m.id}" type="number" min="1" value="100" />
+                </div>
+                <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">Đặt kèo chấp</button>
+              </div>
             ` : `
-              <span class="small">Thể thức: 1X2</span><br>
-              <select id="pick-${m.id}">
-                <option value="HOME">${m.team_a}</option>
-                <option value="DRAW">Hòa</option>
-                <option value="AWAY">${m.team_b}</option>
-              </select>
-              <input id="stake-${m.id}" type="number" min="1" value="100" style="width:90px" />
-              <button onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
+              <div class="bet-box">
+                <div class="small bet-mode">Thể thức: 1X2</div>
+                <div class="bet-controls">
+                  <select id="pick-${m.id}">
+                    <option value="HOME">${m.team_a}</option>
+                    <option value="DRAW">Hòa</option>
+                    <option value="AWAY">${m.team_b}</option>
+                  </select>
+                  <input id="stake-${m.id}" type="number" min="1" value="100" />
+                </div>
+                <button class="bet-action" onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
+              </div>
             `}
           `}
         </td>
@@ -476,14 +555,14 @@ async function renderMatches() {
     .join('');
 
   els.openMatches.innerHTML = `
-    <table>
+    <table class="matches-table">
       <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
       <tbody>${openRows || '<tr><td colspan="6" class="small">Hiện chưa có trận nào mở cược.</td></tr>'}</tbody>
     </table>
   `;
 
   els.closedMatches.innerHTML = `
-    <table>
+    <table class="matches-table">
       <thead><tr><th>Trận</th><th>Kèo 1 (đội nhà)</th><th>Kèo X (hòa)</th><th>Kèo 2 (đội khách)</th><th>Trạng thái</th><th>Đặt cược</th></tr></thead>
       <tbody>${closedRows || '<tr><td colspan="6" class="small">Chưa có trận nào đóng cược.</td></tr>'}</tbody>
     </table>

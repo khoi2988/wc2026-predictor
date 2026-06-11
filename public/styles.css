@@ -139,6 +139,105 @@ thead th {
   top: 0;
 }
 
+.matches-table th:nth-child(1) { width: 20%; }
+.matches-table th:nth-child(2),
+.matches-table th:nth-child(3),
+.matches-table th:nth-child(4) { width: 18%; }
+.matches-table th:nth-child(5) { width: 10%; }
+.matches-table th:nth-child(6) { width: 16%; }
+
+.match-title {
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.match-vs {
+  display: inline-block;
+  margin: 0 4px;
+  color: #6c7a84;
+  font-weight: 600;
+}
+
+.match-kickoff {
+  margin-top: 4px;
+  color: #42515b;
+}
+
+.team-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.team-flag {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.odds-block {
+  display: grid;
+  gap: 4px;
+  line-height: 1.45;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.status-open {
+  background: #eef8f4;
+  color: #146c51;
+}
+
+.status-closed {
+  background: #fff1e8;
+  color: #a64500;
+}
+
+.bet-box {
+  display: grid;
+  gap: 8px;
+  min-width: 210px;
+}
+
+.bet-box.closed {
+  min-width: 0;
+}
+
+.bet-mode {
+  color: #4f6070;
+  font-weight: 600;
+}
+
+.bet-meta {
+  line-height: 1.5;
+}
+
+.bet-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bet-controls select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bet-controls input {
+  width: 86px;
+  flex: 0 0 86px;
+}
+
+.bet-action {
+  width: 100%;
+}
+
 .small { font-size: 12px; opacity: .9; }
 .error { color: #b91c1c; font-weight: 600; }
 .success { color: #166534; font-weight: 600; }
@@ -177,5 +276,16 @@ thead th {
   }
   .tab-btn {
     flex: 1 1 calc(50% - 8px);
+  }
+  .bet-box {
+    min-width: 0;
+  }
+  .bet-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bet-controls input {
+    width: 100%;
+    flex: 1 1 auto;
   }
 }
