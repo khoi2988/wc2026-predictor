@@ -545,6 +545,7 @@ app.use(
 );
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/assets/flag-icons', express.static(path.join(__dirname, '..', 'node_modules', 'flag-icons')));
 
 app.get('/api/health', (req, res) => {
   res.json({

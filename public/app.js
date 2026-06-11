@@ -127,50 +127,50 @@ function fmtTime(iso) {
 }
 
 const TEAM_FLAG_MAP = {
-  argentina: '🇦🇷',
-  australia: '🇦🇺',
-  belgium: '🇧🇪',
-  bosnia: '🇧🇦',
-  'bosnia and herzegovina': '🇧🇦',
-  brazil: '🇧🇷',
-  cameroon: '🇨🇲',
-  canada: '🇨🇦',
-  croatia: '🇭🇷',
-  'costa rica': '🇨🇷',
-  'czech republic': '🇨🇿',
-  czechia: '🇨🇿',
-  denmark: '🇩🇰',
-  ecuador: '🇪🇨',
-  england: '🏴',
-  france: '🇫🇷',
-  germany: '🇩🇪',
-  ghana: '🇬🇭',
-  haiti: '🇭🇹',
-  iran: '🇮🇷',
-  japan: '🇯🇵',
-  mexico: '🇲🇽',
-  morocco: '🇲🇦',
-  netherlands: '🇳🇱',
-  paraguay: '🇵🇾',
-  peru: '🇵🇪',
-  poland: '🇵🇱',
-  portugal: '🇵🇹',
-  qatar: '🇶🇦',
-  'saudi arabia': '🇸🇦',
-  scotland: '🏴',
-  senegal: '🇸🇳',
-  serbia: '🇷🇸',
-  'south africa': '🇿🇦',
-  'south korea': '🇰🇷',
-  korea: '🇰🇷',
-  spain: '🇪🇸',
-  switzerland: '🇨🇭',
-  tunisia: '🇹🇳',
-  turkey: '🇹🇷',
-  usa: '🇺🇸',
-  'united states': '🇺🇸',
-  uruguay: '🇺🇾',
-  wales: '🏴'
+  argentina: 'ar',
+  australia: 'au',
+  belgium: 'be',
+  bosnia: 'ba',
+  'bosnia and herzegovina': 'ba',
+  brazil: 'br',
+  cameroon: 'cm',
+  canada: 'ca',
+  croatia: 'hr',
+  'costa rica': 'cr',
+  'czech republic': 'cz',
+  czechia: 'cz',
+  denmark: 'dk',
+  ecuador: 'ec',
+  england: 'gb-eng',
+  france: 'fr',
+  germany: 'de',
+  ghana: 'gh',
+  haiti: 'ht',
+  iran: 'ir',
+  japan: 'jp',
+  mexico: 'mx',
+  morocco: 'ma',
+  netherlands: 'nl',
+  paraguay: 'py',
+  peru: 'pe',
+  poland: 'pl',
+  portugal: 'pt',
+  qatar: 'qa',
+  'saudi arabia': 'sa',
+  scotland: 'gb-sct',
+  senegal: 'sn',
+  serbia: 'rs',
+  'south africa': 'za',
+  'south korea': 'kr',
+  korea: 'kr',
+  spain: 'es',
+  switzerland: 'ch',
+  tunisia: 'tn',
+  turkey: 'tr',
+  usa: 'us',
+  'united states': 'us',
+  uruguay: 'uy',
+  wales: 'gb-wls'
 };
 
 function normalizeTeamKey(name) {
@@ -181,13 +181,13 @@ function normalizeTeamKey(name) {
     .trim();
 }
 
-function teamFlag(name) {
+function teamFlagCode(name) {
   return TEAM_FLAG_MAP[normalizeTeamKey(name)] || '';
 }
 
 function teamLabel(name) {
-  const flag = teamFlag(name);
-  return `<span class="team-name">${flag ? `<span class="team-flag">${flag}</span>` : ''}<span>${name}</span></span>`;
+  const flagCode = teamFlagCode(name);
+  return `<span class="team-name">${flagCode ? `<img class="team-flag" src="/assets/flag-icons/flags/4x3/${flagCode}.svg" alt="${name}" loading="lazy" />` : ''}<span>${name}</span></span>`;
 }
 
 function matchLabel(teamA, teamB) {
