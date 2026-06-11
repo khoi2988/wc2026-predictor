@@ -191,7 +191,13 @@ function teamLabel(name) {
 }
 
 function matchLabel(teamA, teamB) {
-  return `${teamLabel(teamA)} <span class="match-vs">vs</span> ${teamLabel(teamB)}`;
+  return `
+    <div class="match-pair">
+      <div class="team-line">${teamLabel(teamA)}</div>
+      <div class="match-vs">vs</div>
+      <div class="team-line">${teamLabel(teamB)}</div>
+    </div>
+  `;
 }
 
 function pickLabel(pick) {
@@ -523,7 +529,7 @@ async function renderMatches() {
                   </select>
                   <input id="hcp-stake-${m.id}" type="number" min="1" value="100" />
                 </div>
-                <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">Đặt kèo chấp</button>
+                <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">Đặt</button>
               </div>
             ` : `
               <div class="bet-box">
@@ -536,7 +542,7 @@ async function renderMatches() {
                   </select>
                   <input id="stake-${m.id}" type="number" min="1" value="100" />
                 </div>
-                <button class="bet-action" onclick="placeBet(${m.id}, '1X2')">Đặt 1X2</button>
+                <button class="bet-action" onclick="placeBet(${m.id}, '1X2')">Đặt</button>
               </div>
             `}
           `}

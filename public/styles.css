@@ -147,20 +147,27 @@ thead th {
 .matches-table th:nth-child(6) { width: 16%; }
 
 .match-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
   font-weight: 700;
   line-height: 1.5;
 }
 
+.match-pair {
+  display: grid;
+  gap: 2px;
+}
+
+.team-line {
+  display: flex;
+  align-items: center;
+}
+
 .match-vs {
-  display: inline-block;
+  display: block;
   margin: 0;
   color: #6c7a84;
   font-weight: 600;
-  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .match-kickoff {
