@@ -147,15 +147,20 @@ thead th {
 .matches-table th:nth-child(6) { width: 16%; }
 
 .match-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   font-weight: 700;
   line-height: 1.5;
 }
 
 .match-vs {
   display: inline-block;
-  margin: 0 4px;
+  margin: 0;
   color: #6c7a84;
   font-weight: 600;
+  flex: 0 0 auto;
 }
 
 .match-kickoff {
@@ -167,7 +172,14 @@ thead th {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.team-name span:last-child {
+  white-space: nowrap;
 }
 
 .team-flag {
@@ -184,6 +196,10 @@ thead th {
   display: grid;
   gap: 4px;
   line-height: 1.45;
+}
+
+.odds-block .team-name {
+  vertical-align: middle;
 }
 
 .status-pill {
@@ -292,5 +308,8 @@ thead th {
   .bet-controls input {
     width: 100%;
     flex: 1 1 auto;
+  }
+  .match-title {
+    gap: 6px;
   }
 }
