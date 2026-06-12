@@ -32,6 +32,7 @@ const REMOTE_STATE_ID = 1;
 
 const app = express();
 const dbPath = path.join(__dirname, '..', 'data.json');
+const TEAM_CATALOG = require(path.join(__dirname, '..', 'public', 'team-catalog.js'));
 const useRemoteDb = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const supabase = useRemoteDb ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
 
@@ -108,68 +109,13 @@ function normalizeName(name) {
     .replace(/\s+/g, ' ');
 }
 
-const TEAM_NAME_MAP = {
-  argentina: 'Argentina',
-  'a cap': 'Egypt',
-  'a rap xe ut': 'Saudi Arabia',
-  australia: 'Australia',
-  belgium: 'Belgium',
-  bi: 'Belgium',
-  'bo bien nga': 'Ivory Coast',
-  bosnia: 'Bosnia',
-  'bosnia and herzegovina': 'Bosnia',
-  brazil: 'Brazil',
-  cameroon: 'Cameroon',
-  canada: 'Canada',
-  'cape verde': 'Cape Verde',
-  'cape verde islands': 'Cape Verde',
-  croatia: 'Croatia',
-  'costa rica': 'Costa Rica',
-  curacao: 'Curacao',
-  'czech republic': 'Czech Republic',
-  czechia: 'Czech Republic',
-  denmark: 'Denmark',
-  duc: 'Germany',
-  ecuador: 'Ecuador',
-  egypt: 'Egypt',
-  england: 'England',
-  france: 'France',
-  germany: 'Germany',
-  ghana: 'Ghana',
-  haiti: 'Haiti',
-  'ha lan': 'Netherlands',
-  iran: 'Iran',
-  'ivory coast': 'Ivory Coast',
-  japan: 'Japan',
-  mexico: 'Mexico',
-  morocco: 'Morocco',
-  'new zealand': 'New Zealand',
-  netherlands: 'Netherlands',
-  nhat: 'Japan',
-  'nhat ban': 'Japan',
-  paraguay: 'Paraguay',
-  peru: 'Peru',
-  poland: 'Poland',
-  portugal: 'Portugal',
-  qatar: 'Qatar',
-  'saudi arabia': 'Saudi Arabia',
-  scotland: 'Scotland',
-  senegal: 'Senegal',
-  serbia: 'Serbia',
-  'south africa': 'South Africa',
-  'south korea': 'South Korea',
-  korea: 'South Korea',
-  spain: 'Spain',
-  'tay ban nha': 'Spain',
-  sweden: 'Sweden',
-  switzerland: 'Switzerland',
-  tunisia: 'Tunisia',
-  turkey: 'Turkey',
-  usa: 'USA',
-  'united states': 'USA',
-  uruguay: 'Uruguay',
-  wales: 'Wales'
-};
+const TEAM_NAME_MAP = TEAM_CATALOG.reduce((acc, team) => {
+  const names = [team.canonical, ...(team.aliases || [])];
+  for (const name of names) {
+    acc[normalizeName(name)] = team.canonical;
+  }
+  return acc;
+}, {});
 
 function canonicalTeamName(name) {
   const trimmed = String(name || '').trim();

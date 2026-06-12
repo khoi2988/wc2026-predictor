@@ -1,0 +1,61 @@
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.__TEAM_CATALOG__ = factory();
+  }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  return [
+    { canonical: 'Algeria', flag: 'dz', aliases: ['algeria', 'algérie', 'algerie'] },
+    { canonical: 'Argentina', flag: 'ar', aliases: ['argentina'] },
+    { canonical: 'Australia', flag: 'au', aliases: ['australia'] },
+    { canonical: 'Austria', flag: 'at', aliases: ['austria', 'ao'] },
+    { canonical: 'Belgium', flag: 'be', aliases: ['belgium', 'bi'] },
+    { canonical: 'Bosnia', flag: 'ba', aliases: ['bosnia', 'bosnia and herzegovina', 'bosnia-herzegovina'] },
+    { canonical: 'Brazil', flag: 'br', aliases: ['brazil', 'brasil'] },
+    { canonical: 'Cameroon', flag: 'cm', aliases: ['cameroon'] },
+    { canonical: 'Canada', flag: 'ca', aliases: ['canada'] },
+    { canonical: 'Cape Verde', flag: 'cv', aliases: ['cape verde', 'cape verde islands'] },
+    { canonical: 'Costa Rica', flag: 'cr', aliases: ['costa rica'] },
+    { canonical: 'Croatia', flag: 'hr', aliases: ['croatia'] },
+    { canonical: 'Curacao', flag: 'cw', aliases: ['curacao', 'curaçao'] },
+    { canonical: 'Czech Republic', flag: 'cz', aliases: ['czech republic', 'czechia', 'cong hoa sec', 'sec'] },
+    { canonical: 'Denmark', flag: 'dk', aliases: ['denmark', 'dan mach'] },
+    { canonical: 'Ecuador', flag: 'ec', aliases: ['ecuador'] },
+    { canonical: 'Egypt', flag: 'eg', aliases: ['egypt', 'ai cap'] },
+    { canonical: 'England', flag: 'gb-eng', aliases: ['england', 'anh'] },
+    { canonical: 'France', flag: 'fr', aliases: ['france', 'phap'] },
+    { canonical: 'Germany', flag: 'de', aliases: ['germany', 'duc'] },
+    { canonical: 'Ghana', flag: 'gh', aliases: ['ghana'] },
+    { canonical: 'Haiti', flag: 'ht', aliases: ['haiti'] },
+    { canonical: 'Iran', flag: 'ir', aliases: ['iran'] },
+    { canonical: 'Iraq', flag: 'iq', aliases: ['iraq'] },
+    { canonical: 'Ivory Coast', flag: 'ci', aliases: ['ivory coast', 'bo bien nga', 'cote divoire', "cote d'ivoire", 'côte divoire', "côte d'ivoire"] },
+    { canonical: 'Japan', flag: 'jp', aliases: ['japan', 'nhat', 'nhat ban'] },
+    { canonical: 'Jordan', flag: 'jo', aliases: ['jordan'] },
+    { canonical: 'Mexico', flag: 'mx', aliases: ['mexico'] },
+    { canonical: 'Morocco', flag: 'ma', aliases: ['morocco', 'ma roc', 'maroc'] },
+    { canonical: 'Netherlands', flag: 'nl', aliases: ['netherlands', 'ha lan', 'holland'] },
+    { canonical: 'New Zealand', flag: 'nz', aliases: ['new zealand'] },
+    { canonical: 'Norway', flag: 'no', aliases: ['norway', 'na uy'] },
+    { canonical: 'Paraguay', flag: 'py', aliases: ['paraguay'] },
+    { canonical: 'Peru', flag: 'pe', aliases: ['peru'] },
+    { canonical: 'Poland', flag: 'pl', aliases: ['poland', 'ba lan'] },
+    { canonical: 'Portugal', flag: 'pt', aliases: ['portugal', 'bo dao nha'] },
+    { canonical: 'Qatar', flag: 'qa', aliases: ['qatar'] },
+    { canonical: 'Saudi Arabia', flag: 'sa', aliases: ['saudi arabia', 'saudi', 'a rap xe ut', 'ksa'] },
+    { canonical: 'Scotland', flag: 'gb-sct', aliases: ['scotland', 'to cach lan'] },
+    { canonical: 'Senegal', flag: 'sn', aliases: ['senegal'] },
+    { canonical: 'Serbia', flag: 'rs', aliases: ['serbia'] },
+    { canonical: 'South Africa', flag: 'za', aliases: ['south africa', 'nam phi'] },
+    { canonical: 'South Korea', flag: 'kr', aliases: ['south korea', 'korea', 'han quoc'] },
+    { canonical: 'Spain', flag: 'es', aliases: ['spain', 'tay ban nha'] },
+    { canonical: 'Sweden', flag: 'se', aliases: ['sweden', 'thuy dien'] },
+    { canonical: 'Switzerland', flag: 'ch', aliases: ['switzerland', 'thuy si'] },
+    { canonical: 'Tunisia', flag: 'tn', aliases: ['tunisia'] },
+    { canonical: 'Turkey', flag: 'tr', aliases: ['turkey', 'tho nhi ky', 'turkiye'] },
+    { canonical: 'USA', flag: 'us', aliases: ['usa', 'united states', 'my'] },
+    { canonical: 'Uruguay', flag: 'uy', aliases: ['uruguay'] },
+    { canonical: 'Wales', flag: 'gb-wls', aliases: ['wales', 'xu wales'] }
+  ];
+});

@@ -202,91 +202,7 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleString(currentLocale());
 }
 
-const TEAM_FLAG_MAP = {
-  'a cap': 'eg',
-  'a rap xe ut': 'sa',
-  argentina: 'ar',
-  australia: 'au',
-  belgium: 'be',
-  bi: 'be',
-  'bo bien nga': 'ci',
-  bosnia: 'ba',
-  bosnia: 'ba',
-  'bosnia and herzegovina': 'ba',
-  brazil: 'br',
-  cameroon: 'cm',
-  canada: 'ca',
-  'cape verde': 'cv',
-  croatia: 'hr',
-  'costa rica': 'cr',
-  curacao: 'cw',
-  'czech republic': 'cz',
-  czechia: 'cz',
-  denmark: 'dk',
-  duc: 'de',
-  egypt: 'eg',
-  ecuador: 'ec',
-  'ha lan': 'nl',
-  ecuador: 'ec',
-  'ivory coast': 'ci',
-  england: 'gb-eng',
-  france: 'fr',
-  germany: 'de',
-  ghana: 'gh',
-  haiti: 'ht',
-  'hà lan': 'nl',
-  'ha lan': 'nl',
-  iran: 'ir',
-  japan: 'jp',
-  nhat: 'jp',
-  'nhat ban': 'jp',
-  mexico: 'mx',
-  morocco: 'ma',
-  'new zealand': 'nz',
-  netherlands: 'nl',
-  paraguay: 'py',
-  peru: 'pe',
-  poland: 'pl',
-  portugal: 'pt',
-  qatar: 'qa',
-  'saudi arabia': 'sa',
-  scotland: 'gb-sct',
-  senegal: 'sn',
-  serbia: 'rs',
-  'south africa': 'za',
-  'south korea': 'kr',
-  korea: 'kr',
-  spain: 'es',
-  'tay ban nha': 'es',
-  switzerland: 'ch',
-  sweden: 'se',
-  tunisia: 'tn',
-  turkey: 'tr',
-  usa: 'us',
-  'united states': 'us',
-  uruguay: 'uy',
-  wales: 'gb-wls'
-};
-
-const TEAM_DISPLAY_MAP = {
-  'a cap': 'Egypt',
-  'a rap xe ut': 'Saudi Arabia',
-  bi: 'Belgium',
-  'cape verde': 'Cape Verde',
-  duc: 'Germany',
-  egypt: 'Egypt',
-  germany: 'Germany',
-  'ha lan': 'Netherlands',
-  'new zealand': 'New Zealand',
-  netherlands: 'Netherlands',
-  nhat: 'Japan',
-  'nhat ban': 'Japan',
-  japan: 'Japan',
-  'bo bien nga': 'Ivory Coast',
-  'ivory coast': 'Ivory Coast',
-  curacao: 'Curacao',
-  'tay ban nha': 'Spain'
-};
+const TEAM_CATALOG = Array.isArray(window.__TEAM_CATALOG__) ? window.__TEAM_CATALOG__ : [];
 
 function normalizeTeamKey(name) {
   return String(name || '')
@@ -299,14 +215,22 @@ function normalizeTeamKey(name) {
     .trim();
 }
 
+const TEAM_LOOKUP = TEAM_CATALOG.reduce((acc, team) => {
+  const names = [team.canonical, ...(team.aliases || [])];
+  for (const name of names) {
+    acc[normalizeTeamKey(name)] = team;
+  }
+  return acc;
+}, {});
+
 function canonicalTeamDisplay(name) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return '';
-  return TEAM_DISPLAY_MAP[normalizeTeamKey(trimmed)] || trimmed;
+  return TEAM_LOOKUP[normalizeTeamKey(trimmed)]?.canonical || trimmed;
 }
 
 function teamFlagCode(name) {
-  return TEAM_FLAG_MAP[normalizeTeamKey(name)] || '';
+  return TEAM_LOOKUP[normalizeTeamKey(name)]?.flag || '';
 }
 
 function teamLabel(name) {
