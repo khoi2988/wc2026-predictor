@@ -97,6 +97,78 @@ function loadDb() {
   return db;
 }
 
+function normalizeName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ');
+}
+
+const TEAM_NAME_MAP = {
+  argentina: 'Argentina',
+  australia: 'Australia',
+  belgium: 'Belgium',
+  'bo bien nga': 'Ivory Coast',
+  bosnia: 'Bosnia',
+  'bosnia and herzegovina': 'Bosnia',
+  brazil: 'Brazil',
+  cameroon: 'Cameroon',
+  canada: 'Canada',
+  croatia: 'Croatia',
+  'costa rica': 'Costa Rica',
+  curacao: 'Curacao',
+  'czech republic': 'Czech Republic',
+  czechia: 'Czech Republic',
+  denmark: 'Denmark',
+  duc: 'Germany',
+  ecuador: 'Ecuador',
+  england: 'England',
+  france: 'France',
+  germany: 'Germany',
+  ghana: 'Ghana',
+  haiti: 'Haiti',
+  'ha lan': 'Netherlands',
+  iran: 'Iran',
+  'ivory coast': 'Ivory Coast',
+  japan: 'Japan',
+  mexico: 'Mexico',
+  morocco: 'Morocco',
+  netherlands: 'Netherlands',
+  nhat: 'Japan',
+  'nhat ban': 'Japan',
+  paraguay: 'Paraguay',
+  peru: 'Peru',
+  poland: 'Poland',
+  portugal: 'Portugal',
+  qatar: 'Qatar',
+  'saudi arabia': 'Saudi Arabia',
+  scotland: 'Scotland',
+  senegal: 'Senegal',
+  serbia: 'Serbia',
+  'south africa': 'South Africa',
+  'south korea': 'South Korea',
+  korea: 'South Korea',
+  spain: 'Spain',
+  sweden: 'Sweden',
+  switzerland: 'Switzerland',
+  tunisia: 'Tunisia',
+  turkey: 'Turkey',
+  usa: 'USA',
+  'united states': 'USA',
+  uruguay: 'Uruguay',
+  wales: 'Wales'
+};
+
+function canonicalTeamName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
+}
+
 let db = loadDb();
 
 for (const user of db.users) {
@@ -319,76 +391,21 @@ function applyDailyBonusToAllUsers() {
   return changed;
 }
 
-function normalizeName(name) {
-  return String(name || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/\./g, '')
-    .replace(/\s+/g, ' ');
-}
-
-const TEAM_NAME_MAP = {
-  argentina: 'Argentina',
-  australia: 'Australia',
-  belgium: 'Belgium',
-  'bo bien nga': 'Ivory Coast',
-  bosnia: 'Bosnia',
-  'bosnia and herzegovina': 'Bosnia',
-  brazil: 'Brazil',
-  cameroon: 'Cameroon',
-  canada: 'Canada',
-  croatia: 'Croatia',
-  'costa rica': 'Costa Rica',
-  curacao: 'Curacao',
-  'czech republic': 'Czech Republic',
-  czechia: 'Czech Republic',
-  denmark: 'Denmark',
-  duc: 'Germany',
-  ecuador: 'Ecuador',
-  england: 'England',
-  france: 'France',
-  germany: 'Germany',
-  ghana: 'Ghana',
-  haiti: 'Haiti',
-  'ha lan': 'Netherlands',
-  iran: 'Iran',
-  'ivory coast': 'Ivory Coast',
-  japan: 'Japan',
-  mexico: 'Mexico',
-  morocco: 'Morocco',
-  netherlands: 'Netherlands',
-  nhat: 'Japan',
-  'nhat ban': 'Japan',
-  paraguay: 'Paraguay',
-  peru: 'Peru',
-  poland: 'Poland',
-  portugal: 'Portugal',
-  qatar: 'Qatar',
-  'saudi arabia': 'Saudi Arabia',
-  scotland: 'Scotland',
-  senegal: 'Senegal',
-  serbia: 'Serbia',
-  'south africa': 'South Africa',
-  'south korea': 'South Korea',
-  korea: 'South Korea',
-  spain: 'Spain',
-  sweden: 'Sweden',
-  switzerland: 'Switzerland',
-  tunisia: 'Tunisia',
-  turkey: 'Turkey',
-  usa: 'USA',
-  'united states': 'USA',
-  uruguay: 'Uruguay',
-  wales: 'Wales'
-};
-
-function canonicalTeamName(name) {
-  const trimmed = String(name || '').trim();
-  if (!trimmed) return '';
-  return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
+function normalizeAllMatchTeamNames() {
+  let changed = 0;
+  for (const match of db.matches) {
+    const nextA = canonicalTeamName(match.team_a);
+    const nextB = canonicalTeamName(match.team_b);
+    if (match.team_a !== nextA) {
+      match.team_a = nextA;
+      changed += 1;
+    }
+    if (match.team_b !== nextB) {
+      match.team_b = nextB;
+      changed += 1;
+    }
+  }
+  return changed;
 }
 
 function buildMatchKey(teamA, teamB, kickoffAt) {
@@ -1087,6 +1104,14 @@ app.post('/api/admin/users/reset-points', requireAdmin, (req, res) => {
   }
   saveDb();
   res.json({ ok: true, affectedUsers: db.users.length, points: STARTING_POINTS });
+});
+
+app.post('/api/admin/matches/normalize-teams', requireAdmin, (req, res) => {
+  const changed = normalizeAllMatchTeamNames();
+  if (changed > 0) {
+    saveDb();
+  }
+  res.json({ ok: true, changed });
 });
 
 app.get('/api/admin/maintenance', requireAdmin, (req, res) => {

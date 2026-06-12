@@ -1051,6 +1051,19 @@ document.getElementById('btnResetAllPoints').onclick = async () => {
   }
 };
 
+document.getElementById('btnNormalizeTeams').onclick = async () => {
+  try {
+    if (!window.confirm('Chuẩn hóa toàn bộ tên đội hiện có về tên chuẩn?')) return;
+    const result = await adminApi('/api/admin/matches/normalize-teams', {
+      method: 'POST'
+    });
+    setMessage(`Đã chuẩn hóa ${result.changed} trường tên đội`, 'success');
+    await Promise.all([refresh(), renderAdminMatches()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
 document.getElementById('btnAdminLoadUsers').onclick = async () => {
   await renderAdminUsers();
 };
