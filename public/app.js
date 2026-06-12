@@ -206,6 +206,8 @@ const TEAM_FLAG_MAP = {
   argentina: 'ar',
   australia: 'au',
   belgium: 'be',
+  'bo bien nga': 'ci',
+  bosnia: 'ba',
   bosnia: 'ba',
   'bosnia and herzegovina': 'ba',
   brazil: 'br',
@@ -213,17 +215,26 @@ const TEAM_FLAG_MAP = {
   canada: 'ca',
   croatia: 'hr',
   'costa rica': 'cr',
+  curacao: 'cw',
   'czech republic': 'cz',
   czechia: 'cz',
   denmark: 'dk',
+  duc: 'de',
   ecuador: 'ec',
+  'ha lan': 'nl',
+  ecuador: 'ec',
+  'ivory coast': 'ci',
   england: 'gb-eng',
   france: 'fr',
   germany: 'de',
   ghana: 'gh',
   haiti: 'ht',
+  'hà lan': 'nl',
+  'ha lan': 'nl',
   iran: 'ir',
   japan: 'jp',
+  nhat: 'jp',
+  'nhat ban': 'jp',
   mexico: 'mx',
   morocco: 'ma',
   netherlands: 'nl',
@@ -241,6 +252,7 @@ const TEAM_FLAG_MAP = {
   korea: 'kr',
   spain: 'es',
   switzerland: 'ch',
+  sweden: 'se',
   tunisia: 'tn',
   turkey: 'tr',
   usa: 'us',
@@ -249,12 +261,34 @@ const TEAM_FLAG_MAP = {
   wales: 'gb-wls'
 };
 
+const TEAM_DISPLAY_MAP = {
+  duc: 'Germany',
+  germany: 'Germany',
+  'ha lan': 'Netherlands',
+  netherlands: 'Netherlands',
+  nhat: 'Japan',
+  'nhat ban': 'Japan',
+  japan: 'Japan',
+  'bo bien nga': 'Ivory Coast',
+  'ivory coast': 'Ivory Coast',
+  curacao: 'Curacao'
+};
+
 function normalizeTeamKey(name) {
   return String(name || '')
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
     .replace(/\./g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function canonicalTeamDisplay(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  return TEAM_DISPLAY_MAP[normalizeTeamKey(trimmed)] || trimmed;
 }
 
 function teamFlagCode(name) {
@@ -262,8 +296,9 @@ function teamFlagCode(name) {
 }
 
 function teamLabel(name) {
-  const flagCode = teamFlagCode(name);
-  return `<span class="team-name">${flagCode ? `<img class="team-flag" src="/assets/flag-icons/flags/4x3/${flagCode}.svg" alt="${name}" loading="lazy" />` : ''}<span>${name}</span></span>`;
+  const displayName = canonicalTeamDisplay(name);
+  const flagCode = teamFlagCode(displayName);
+  return `<span class="team-name">${flagCode ? `<img class="team-flag" src="/assets/flag-icons/flags/4x3/${flagCode}.svg" alt="${displayName}" loading="lazy" />` : ''}<span>${displayName}</span></span>`;
 }
 
 function matchLabel(teamA, teamB) {

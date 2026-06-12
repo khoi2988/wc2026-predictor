@@ -117,6 +117,8 @@ for (const user of db.users) {
   }
 }
 for (const match of db.matches) {
+  match.team_a = canonicalTeamName(match.team_a);
+  match.team_b = canonicalTeamName(match.team_b);
   if (!Number.isInteger(match.home_score)) match.home_score = null;
   if (!Number.isInteger(match.away_score)) match.away_score = null;
   if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
@@ -215,6 +217,8 @@ async function loadDbRemoteIfEnabled() {
       if (!Number.isInteger(user.daily_bonus_days_awarded)) user.daily_bonus_days_awarded = 0;
     }
     for (const match of db.matches) {
+      match.team_a = canonicalTeamName(match.team_a);
+      match.team_b = canonicalTeamName(match.team_b);
       if (!Number.isInteger(match.home_score)) match.home_score = null;
       if (!Number.isInteger(match.away_score)) match.away_score = null;
       if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
@@ -316,7 +320,75 @@ function applyDailyBonusToAllUsers() {
 }
 
 function normalizeName(name) {
-  return String(name || '').trim().toLowerCase();
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\./g, '')
+    .replace(/\s+/g, ' ');
+}
+
+const TEAM_NAME_MAP = {
+  argentina: 'Argentina',
+  australia: 'Australia',
+  belgium: 'Belgium',
+  'bo bien nga': 'Ivory Coast',
+  bosnia: 'Bosnia',
+  'bosnia and herzegovina': 'Bosnia',
+  brazil: 'Brazil',
+  cameroon: 'Cameroon',
+  canada: 'Canada',
+  croatia: 'Croatia',
+  'costa rica': 'Costa Rica',
+  curacao: 'Curacao',
+  'czech republic': 'Czech Republic',
+  czechia: 'Czech Republic',
+  denmark: 'Denmark',
+  duc: 'Germany',
+  ecuador: 'Ecuador',
+  england: 'England',
+  france: 'France',
+  germany: 'Germany',
+  ghana: 'Ghana',
+  haiti: 'Haiti',
+  'ha lan': 'Netherlands',
+  iran: 'Iran',
+  'ivory coast': 'Ivory Coast',
+  japan: 'Japan',
+  mexico: 'Mexico',
+  morocco: 'Morocco',
+  netherlands: 'Netherlands',
+  nhat: 'Japan',
+  'nhat ban': 'Japan',
+  paraguay: 'Paraguay',
+  peru: 'Peru',
+  poland: 'Poland',
+  portugal: 'Portugal',
+  qatar: 'Qatar',
+  'saudi arabia': 'Saudi Arabia',
+  scotland: 'Scotland',
+  senegal: 'Senegal',
+  serbia: 'Serbia',
+  'south africa': 'South Africa',
+  'south korea': 'South Korea',
+  korea: 'South Korea',
+  spain: 'Spain',
+  sweden: 'Sweden',
+  switzerland: 'Switzerland',
+  tunisia: 'Tunisia',
+  turkey: 'Turkey',
+  usa: 'USA',
+  'united states': 'USA',
+  uruguay: 'Uruguay',
+  wales: 'Wales'
+};
+
+function canonicalTeamName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return '';
+  return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
 }
 
 function buildMatchKey(teamA, teamB, kickoffAt) {
@@ -384,8 +456,8 @@ async function syncOddsFromTheOddsApi() {
   });
 
   for (const e of events) {
-    const teamA = e.home_team;
-    const teamB = (e.away_team || '');
+    const teamA = canonicalTeamName(e.home_team);
+    const teamB = canonicalTeamName(e.away_team || '');
     const kickoffAt = e.commence_time;
     if (!teamA || !teamB || !kickoffAt) continue;
 
@@ -497,8 +569,8 @@ async function syncOddsFromApiFootball() {
     totalEvents += rows.length;
 
     for (const row of rows) {
-      const teamA = row?.teams?.home?.name;
-      const teamB = row?.teams?.away?.name;
+      const teamA = canonicalTeamName(row?.teams?.home?.name);
+      const teamB = canonicalTeamName(row?.teams?.away?.name);
       const kickoffAt = row?.fixture?.date;
       if (!teamA || !teamB || !kickoffAt) continue;
 
@@ -1388,8 +1460,8 @@ app.get('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) =
 });
 
 app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) => {
-  const teamA = String(req.body.teamA || '').trim();
-  const teamB = String(req.body.teamB || '').trim();
+  const teamA = canonicalTeamName(req.body.teamA);
+  const teamB = canonicalTeamName(req.body.teamB);
   const kickoffAt = String(req.body.kickoffAt || '').trim();
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
@@ -1447,8 +1519,8 @@ app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, re
   const match = db.matches.find((m) => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found.' });
 
-  if (req.body.teamA !== undefined) match.team_a = String(req.body.teamA).trim();
-  if (req.body.teamB !== undefined) match.team_b = String(req.body.teamB).trim();
+  if (req.body.teamA !== undefined) match.team_a = canonicalTeamName(req.body.teamA);
+  if (req.body.teamB !== undefined) match.team_b = canonicalTeamName(req.body.teamB);
   if (req.body.kickoffAt !== undefined) {
     const parsed = new Date(String(req.body.kickoffAt));
     if (Number.isNaN(parsed.getTime())) return res.status(400).json({ error: 'Invalid kickoff time.' });
