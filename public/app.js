@@ -21,6 +21,9 @@
       }
       throw new Error(data.error || 'Bạn không có quyền thao tác chức năng này.');
     }
+    if (res.status === 503 && data.error === 'Maintenance mode') {
+      throw new Error(data.message || 'Trang đang bảo trì. Vui lòng quay lại sau.');
+    }
     throw new Error(data.error || 'Request failed');
   }
   return data;
@@ -30,6 +33,9 @@ const els = {
   auth: document.getElementById('auth'),
   loginForm: document.getElementById('loginForm'),
   registerForm: document.getElementById('registerForm'),
+  maintenanceCard: document.getElementById('maintenanceCard'),
+  maintenanceText: document.getElementById('maintenanceText'),
+  maintenanceHint: document.getElementById('maintenanceHint'),
   main: document.getElementById('main'),
   me: document.getElementById('me'),
   msg: document.getElementById('msg'),
@@ -44,12 +50,14 @@ const els = {
   adminMatchesHistory: document.getElementById('adminMatchesHistory'),
   adminPanel: document.getElementById('adminPanel'),
   adminOnlyDailyBonus: document.getElementById('adminOnlyDailyBonus'),
+  maintenanceConfigBlock: document.getElementById('maintenanceConfigBlock'),
   adminOnlyExtra: document.getElementById('adminOnlyExtra'),
   matchCreateRow: document.getElementById('matchCreateRow'),
   adminUsers: document.getElementById('adminUsers'),
   adminSpecials: document.getElementById('adminSpecials'),
   adminSpecialsStatus: document.getElementById('adminSpecialsStatus'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
+  maintenanceInfo: document.getElementById('maintenanceInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
   changePasswordForm: document.getElementById('changePasswordForm'),
   fullNameLockCard: document.getElementById('fullNameLockCard'),
@@ -67,6 +75,7 @@ let pendingBetPayload = null;
 let pendingAdminAction = null;
 let activeTabId = 'openMatchesTab';
 let activeAdminMatchesTab = 'open';
+let maintenanceState = { enabled: false, can_access: true, message: '' };
 
 function tr(key, params = {}, fallback = '') {
   const api = window.__i18n;
@@ -158,6 +167,35 @@ function showLoginForm() {
 function showRegisterForm() {
   els.loginForm.classList.add('hidden');
   els.registerForm.classList.remove('hidden');
+}
+
+function syncMaintenanceUI() {
+  const isBlocked = Boolean(maintenanceState.enabled && !maintenanceState.can_access);
+  const isMaintenanceEnabled = Boolean(maintenanceState.enabled);
+  setVisible(els.maintenanceCard, isBlocked);
+
+  if (els.maintenanceText) {
+    els.maintenanceText.textContent = maintenanceState.message || 'Hệ thống đang tạm bảo trì. Chỉ tài khoản admin hoặc operator được phép truy cập trong thời gian này.';
+  }
+  if (els.maintenanceHint) {
+    els.maintenanceHint.textContent = isBlocked
+      ? 'Nếu bạn là admin/operator, bạn vẫn có thể đăng nhập ở khung phía trên.'
+      : '';
+  }
+
+  const showRegisterLink = document.getElementById('showRegister');
+  const loginHint = document.getElementById('loginHint');
+  if (showRegisterLink) {
+    showRegisterLink.classList.toggle('hidden', isMaintenanceEnabled);
+  }
+  if (loginHint) {
+    loginHint.textContent = isMaintenanceEnabled
+      ? 'Trang đang bảo trì: chỉ admin/operator được đăng nhập.'
+      : 'Chưa có tài khoản?';
+  }
+  if (isMaintenanceEnabled && !els.registerForm.classList.contains('hidden')) {
+    showLoginForm();
+  }
 }
 
 function fmtTime(iso) {
@@ -326,7 +364,26 @@ async function adminApi(url, options = {}) {
 
 async function refresh() {
   const meRes = await api('/api/me');
+  maintenanceState = meRes.maintenance || { enabled: false, can_access: true, message: '' };
+  syncMaintenanceUI();
   const user = meRes.user;
+
+  if (maintenanceState.enabled && !maintenanceState.can_access) {
+    currentUser = null;
+    els.auth.classList.remove('hidden');
+    els.main.classList.add('hidden');
+    els.adminPanel.classList.add('hidden');
+    els.adminMatchesActive.innerHTML = '';
+    els.adminMatchesHistory.innerHTML = '';
+    els.adminUsers.innerHTML = '';
+    els.currentUserLabel.textContent = '';
+    els.fullNameLockCard.classList.add('hidden');
+    els.changePasswordForm.classList.add('hidden');
+    els.me.innerHTML = `<span class="badge">Bảo trì</span>`;
+    await renderHealth();
+    showLoginForm();
+    return;
+  }
 
   if (!user) {
     currentUser = null;
@@ -352,11 +409,12 @@ async function refresh() {
   if (canOperate) {
     els.adminPanel.classList.remove('hidden');
     els.adminOnlyDailyBonus.classList.toggle('hidden', !user.is_admin);
+    els.maintenanceConfigBlock.classList.toggle('hidden', !user.is_admin);
     els.adminOnlyExtra.classList.toggle('hidden', !user.is_admin);
     els.matchCreateRow.classList.toggle('hidden', !(user.is_admin || user.can_manage_odds));
     document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !user.is_admin);
     if (user.is_admin) {
-      await renderDailyBonusConfig();
+      await Promise.all([renderDailyBonusConfig(), renderMaintenanceConfig()]);
     }
   } else {
     els.adminPanel.classList.add('hidden');
@@ -383,6 +441,19 @@ async function renderDailyBonusConfig() {
     els.dailyBonusInfo.textContent = `Đã cộng lũy kế: ${data.targetDays || 0} ngày.`;
   } catch (e) {
     els.dailyBonusInfo.textContent = e.message;
+  }
+}
+
+async function renderMaintenanceConfig() {
+  try {
+    const data = await adminApi('/api/admin/maintenance');
+    document.getElementById('maintenanceEnabled').checked = Boolean(data.maintenance?.enabled);
+    document.getElementById('maintenanceMessageInput').value = data.maintenance?.message || '';
+    els.maintenanceInfo.textContent = data.maintenance?.enabled
+      ? 'Đang bật chế độ bảo trì.'
+      : 'Trang đang hoạt động bình thường.';
+  } catch (e) {
+    els.maintenanceInfo.textContent = e.message;
   }
 }
 
@@ -872,6 +943,21 @@ document.getElementById('btnSaveDailyBonus').onclick = async () => {
     });
     setMessage('Lưu cấu hình cộng điểm mỗi ngày thành công', 'success');
     await Promise.all([refresh(), renderLeaderboard()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+document.getElementById('btnSaveMaintenance').onclick = async () => {
+  try {
+    const enabled = document.getElementById('maintenanceEnabled').checked;
+    const message = document.getElementById('maintenanceMessageInput').value.trim();
+    await adminApi('/api/admin/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({ enabled, message })
+    });
+    setMessage(enabled ? 'Đã bật chế độ bảo trì' : 'Đã tắt chế độ bảo trì', 'success');
+    await refresh();
   } catch (e) {
     setMessage(e.message, 'error');
   }

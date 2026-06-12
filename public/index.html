@@ -47,6 +47,12 @@
       </div>
     </div>
 
+    <div id="maintenanceCard" class="card hidden">
+      <h2 id="maintenanceTitle">Trang đang bảo trì</h2>
+      <p id="maintenanceText">Hệ thống đang tạm bảo trì. Chỉ tài khoản admin hoặc operator được phép truy cập trong thời gian này.</p>
+      <p id="maintenanceHint" class="small">Nếu bạn là admin/operator, bạn vẫn có thể đăng nhập ở khung phía trên.</p>
+    </div>
+
     <div class="card">
       <div id="msg" class="small"></div>
     </div>
@@ -100,6 +106,16 @@
             <button id="btnSaveDailyBonus">Lưu cấu hình</button>
           </div>
           <div id="dailyBonusInfo" class="small"></div>
+        </div>
+
+        <div id="maintenanceConfigBlock">
+          <h3>Chế độ bảo trì</h3>
+          <div class="row">
+            <label><input id="maintenanceEnabled" type="checkbox" /> Bật bảo trì</label>
+            <input id="maintenanceMessageInput" placeholder="Thông báo bảo trì (tùy chọn)" />
+            <button id="btnSaveMaintenance" class="alt">Lưu chế độ bảo trì</button>
+          </div>
+          <div id="maintenanceInfo" class="small"></div>
         </div>
 
         <div class="row">

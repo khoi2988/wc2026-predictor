@@ -66,6 +66,10 @@ function defaultDb() {
       start_date: null,
       points_per_day: 0
     },
+    maintenance: {
+      enabled: false,
+      message: ''
+    },
     users: [],
     matches: seedMatches(),
     bets: []
@@ -130,6 +134,15 @@ if (!Array.isArray(db.specialPicks)) {
 }
 if (!db.dailyBonus || typeof db.dailyBonus !== 'object') {
   db.dailyBonus = defaultDb().dailyBonus;
+}
+if (!db.maintenance || typeof db.maintenance !== 'object') {
+  db.maintenance = defaultDb().maintenance;
+}
+if (typeof db.maintenance.enabled !== 'boolean') {
+  db.maintenance.enabled = false;
+}
+if (typeof db.maintenance.message !== 'string') {
+  db.maintenance.message = '';
 }
 if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') {
   db.specialPredictionConfig = defaultDb().specialPredictionConfig;
@@ -214,6 +227,9 @@ async function loadDbRemoteIfEnabled() {
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
     if (!db.dailyBonus || typeof db.dailyBonus !== 'object') db.dailyBonus = defaultDb().dailyBonus;
+    if (!db.maintenance || typeof db.maintenance !== 'object') db.maintenance = defaultDb().maintenance;
+    if (typeof db.maintenance.enabled !== 'boolean') db.maintenance.enabled = false;
+    if (typeof db.maintenance.message !== 'string') db.maintenance.message = '';
     if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') db.specialPredictionConfig = defaultDb().specialPredictionConfig;
     if (typeof db.specialPredictionConfig.deadline_iso !== 'string' || !db.specialPredictionConfig.deadline_iso) db.specialPredictionConfig.deadline_iso = SPECIAL_PREDICTION_DEADLINE_ISO;
     if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') db.specialPredictionConfig.manually_locked = false;
@@ -570,9 +586,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function getSessionUserRecord(req) {
+  if (!req.session.user) return null;
+  return db.users.find((u) => u.id === req.session.user.id) || null;
+}
+
 function hasPermission(req, permissionKey) {
-  if (!req.session.user) return false;
-  const user = db.users.find((u) => u.id === req.session.user.id);
+  const user = getSessionUserRecord(req);
   if (!user) return false;
   if (user.is_admin) return true;
   return Boolean(user[permissionKey]);
@@ -681,12 +701,41 @@ function sanitizeUser(user) {
   };
 }
 
+function canBypassMaintenance(user) {
+  return Boolean(user && (user.is_admin || user.can_manage_odds || user.can_set_result));
+}
+
+function getMaintenanceState(user = null) {
+  const cfg = db.maintenance || {};
+  const enabled = Boolean(cfg.enabled);
+  const message = String(cfg.message || '').trim();
+  return {
+    enabled,
+    message,
+    can_access: !enabled || canBypassMaintenance(user)
+  };
+}
+
 function currentUser(req) {
   applyDailyBonusToAllUsers();
-  if (!req.session.user) return null;
-  const user = db.users.find((u) => u.id === req.session.user.id);
+  const user = getSessionUserRecord(req);
   return user ? sanitizeUser(user) : null;
 }
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path === '/me' || req.path === '/login' || req.path === '/logout') {
+    return next();
+  }
+  const maintenance = getMaintenanceState(getSessionUserRecord(req));
+  if (maintenance.enabled && !maintenance.can_access) {
+    return res.status(503).json({
+      error: 'Maintenance mode',
+      message: maintenance.message || 'Trang đang bảo trì. Vui lòng quay lại sau.',
+      maintenance
+    });
+  }
+  next();
+});
 
 app.post('/api/register', async (req, res) => {
   const username = String(req.body.username || '').trim();
@@ -743,6 +792,15 @@ app.post('/api/login', async (req, res) => {
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid credentials.' });
 
+  const maintenance = getMaintenanceState(user);
+  if (maintenance.enabled && !maintenance.can_access) {
+    return res.status(503).json({
+      error: 'Maintenance mode',
+      message: maintenance.message || 'Trang đang bảo trì. Chỉ admin/operator mới có thể đăng nhập lúc này.',
+      maintenance
+    });
+  }
+
   req.session.user = { id: user.id, username: user.username };
   return res.json({ ok: true, user: currentUser(req) });
 });
@@ -771,7 +829,12 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-  res.json({ user: currentUser(req) });
+  const userRecord = getSessionUserRecord(req);
+  const maintenance = getMaintenanceState(userRecord);
+  res.json({
+    user: maintenance.enabled && !maintenance.can_access ? null : currentUser(req),
+    maintenance
+  });
 });
 
 app.get('/api/matches', (req, res) => {
@@ -952,6 +1015,18 @@ app.post('/api/admin/users/reset-points', requireAdmin, (req, res) => {
   }
   saveDb();
   res.json({ ok: true, affectedUsers: db.users.length, points: STARTING_POINTS });
+});
+
+app.get('/api/admin/maintenance', requireAdmin, (req, res) => {
+  const maintenance = getMaintenanceState(getSessionUserRecord(req));
+  res.json({ maintenance });
+});
+
+app.post('/api/admin/maintenance', requireAdmin, (req, res) => {
+  db.maintenance.enabled = Boolean(req.body.enabled);
+  db.maintenance.message = String(req.body.message || '').trim().slice(0, 500);
+  saveDb();
+  res.json({ ok: true, maintenance: getMaintenanceState(getSessionUserRecord(req)) });
 });
 
 app.get('/api/admin/daily-bonus', requireAdmin, (req, res) => {
