@@ -54,11 +54,14 @@ const els = {
   fullNameLockCard: document.getElementById('fullNameLockCard'),
   betConfirmModal: document.getElementById('betConfirmModal'),
   betConfirmContent: document.getElementById('betConfirmContent'),
+  adminConfirmModal: document.getElementById('adminConfirmModal'),
+  adminConfirmContent: document.getElementById('adminConfirmContent'),
   tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
   tabPanels: Array.from(document.querySelectorAll('.tab-panel'))
 };
 let currentUser = null;
 let pendingBetPayload = null;
+let pendingAdminAction = null;
 let activeTabId = 'openMatchesTab';
 
 function tr(key, params = {}, fallback = '') {
@@ -250,6 +253,18 @@ function closeBetConfirm() {
   els.betConfirmContent.innerHTML = '';
 }
 
+function closeAdminConfirm() {
+  pendingAdminAction = null;
+  els.adminConfirmModal.classList.add('hidden');
+  els.adminConfirmContent.innerHTML = '';
+}
+
+function openAdminConfirm(html, action) {
+  pendingAdminAction = action;
+  els.adminConfirmContent.innerHTML = html;
+  els.adminConfirmModal.classList.remove('hidden');
+}
+
 function openBetConfirm(payload) {
   pendingBetPayload = payload;
   els.betConfirmContent.innerHTML = `
@@ -348,7 +363,8 @@ async function renderAdminMatches() {
     const canSetResult = Boolean(currentUser && (currentUser.is_admin || currentUser.can_set_result));
     const canDelete = Boolean(currentUser && currentUser.is_admin);
     const data = await adminApi('/api/admin/matches');
-    const rows = data.matches.map((m) => `
+    const activeMatches = data.matches.filter((m) => !m.result);
+    const rows = activeMatches.map((m) => `
       <tr>
         <td>${m.id}</td>
         <td>${m.team_a}</td>
@@ -389,8 +405,10 @@ async function renderAdminMatches() {
         </td>
       </tr>
     `).join('');
-    els.adminMatches.innerHTML = `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`;
-    for (const m of data.matches) {
+    els.adminMatches.innerHTML = activeMatches.length
+      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<p class="small">Hiện không còn trận nào chờ set kèo/kết quả.</p>`;
+    for (const m of activeMatches) {
       syncRowModeUI(m.id);
       const modeEl = document.getElementById(`mode-${m.id}`);
       if (modeEl) {
@@ -689,6 +707,19 @@ document.getElementById('btnConfirmBet').onclick = async () => {
   }
 };
 
+document.getElementById('btnCancelAdminConfirm').onclick = closeAdminConfirm;
+document.getElementById('adminConfirmBackdrop').onclick = closeAdminConfirm;
+document.getElementById('btnConfirmAdminAction').onclick = async () => {
+  try {
+    if (!pendingAdminAction) return;
+    const action = pendingAdminAction;
+    closeAdminConfirm();
+    await action();
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
 window.cancelBet = async function (betId) {
   try {
     await api(`/api/bets/${betId}`, { method: 'DELETE' });
@@ -898,32 +929,45 @@ document.getElementById('btnAddMatch').onclick = async () => {
   }
 };
 
-window.settleMatch = async function (matchId, result) {
-  try {
-    await adminApi('/api/admin/settle', {
-      method: 'POST',
-      body: JSON.stringify({ matchId, result })
-    });
-    setMessage('Chốt kết quả thành công', 'success');
-    await Promise.all([refresh(), renderAdminMatches()]);
-  } catch (e) {
-    setMessage(e.message, 'error');
-  }
+window.settleMatch = function (matchId, result) {
+  const rowTeamA = document.querySelector(`#score-home-${matchId}`)?.placeholder || 'Đội A';
+  const rowTeamB = document.querySelector(`#score-away-${matchId}`)?.placeholder || 'Đội B';
+  const resultText = result === 'HOME' ? rowTeamA : (result === 'AWAY' ? rowTeamB : 'Hòa');
+  openAdminConfirm(
+    `<p>Bạn sắp chốt kết quả trận <strong>${rowTeamA} vs ${rowTeamB}</strong>.</p><p><strong>Kết quả chọn:</strong> ${resultText}</p><p>Hành động này sẽ tính trả thưởng cho toàn bộ cược của trận.</p>`,
+    async () => {
+      await adminApi('/api/admin/settle', {
+        method: 'POST',
+        body: JSON.stringify({ matchId, result })
+      });
+      setMessage('Chốt kết quả thành công', 'success');
+      await Promise.all([refresh(), renderAdminMatches()]);
+    }
+  );
 };
 
-window.settleByScore = async function (matchId) {
-  try {
-    const homeScore = Number(document.getElementById(`score-home-${matchId}`).value);
-    const awayScore = Number(document.getElementById(`score-away-${matchId}`).value);
-    await adminApi('/api/admin/settle', {
-      method: 'POST',
-      body: JSON.stringify({ matchId, homeScore, awayScore })
-    });
-    setMessage('Chốt tỷ số thành công', 'success');
-    await Promise.all([refresh(), renderAdminMatches()]);
-  } catch (e) {
-    setMessage(e.message, 'error');
+window.settleByScore = function (matchId) {
+  const homeEl = document.getElementById(`score-home-${matchId}`);
+  const awayEl = document.getElementById(`score-away-${matchId}`);
+  const homeScore = Number(homeEl.value);
+  const awayScore = Number(awayEl.value);
+  const teamA = homeEl?.placeholder || 'Đội A';
+  const teamB = awayEl?.placeholder || 'Đội B';
+  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeEl.value === '' || awayEl.value === '') {
+    setMessage('Vui lòng nhập đầy đủ tỷ số trước khi chốt.', 'error');
+    return;
   }
+  openAdminConfirm(
+    `<p>Bạn sắp chốt tỷ số trận <strong>${teamA} vs ${teamB}</strong>.</p><p><strong>Tỷ số:</strong> ${homeScore} - ${awayScore}</p><p>Hành động này sẽ tính trả thưởng cho toàn bộ cược của trận.</p>`,
+    async () => {
+      await adminApi('/api/admin/settle', {
+        method: 'POST',
+        body: JSON.stringify({ matchId, homeScore, awayScore })
+      });
+      setMessage('Chốt tỷ số thành công', 'success');
+      await Promise.all([refresh(), renderAdminMatches()]);
+    }
+  );
 };
 
 window.updateOdds = async function (matchId) {
