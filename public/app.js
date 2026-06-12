@@ -203,9 +203,12 @@ function fmtTime(iso) {
 }
 
 const TEAM_FLAG_MAP = {
+  'a cap': 'eg',
+  'a rap xe ut': 'sa',
   argentina: 'ar',
   australia: 'au',
   belgium: 'be',
+  bi: 'be',
   'bo bien nga': 'ci',
   bosnia: 'ba',
   bosnia: 'ba',
@@ -213,6 +216,7 @@ const TEAM_FLAG_MAP = {
   brazil: 'br',
   cameroon: 'cm',
   canada: 'ca',
+  'cape verde': 'cv',
   croatia: 'hr',
   'costa rica': 'cr',
   curacao: 'cw',
@@ -220,6 +224,7 @@ const TEAM_FLAG_MAP = {
   czechia: 'cz',
   denmark: 'dk',
   duc: 'de',
+  egypt: 'eg',
   ecuador: 'ec',
   'ha lan': 'nl',
   ecuador: 'ec',
@@ -237,6 +242,7 @@ const TEAM_FLAG_MAP = {
   'nhat ban': 'jp',
   mexico: 'mx',
   morocco: 'ma',
+  'new zealand': 'nz',
   netherlands: 'nl',
   paraguay: 'py',
   peru: 'pe',
@@ -251,6 +257,7 @@ const TEAM_FLAG_MAP = {
   'south korea': 'kr',
   korea: 'kr',
   spain: 'es',
+  'tay ban nha': 'es',
   switzerland: 'ch',
   sweden: 'se',
   tunisia: 'tn',
@@ -262,16 +269,23 @@ const TEAM_FLAG_MAP = {
 };
 
 const TEAM_DISPLAY_MAP = {
+  'a cap': 'Egypt',
+  'a rap xe ut': 'Saudi Arabia',
+  bi: 'Belgium',
+  'cape verde': 'Cape Verde',
   duc: 'Germany',
+  egypt: 'Egypt',
   germany: 'Germany',
   'ha lan': 'Netherlands',
+  'new zealand': 'New Zealand',
   netherlands: 'Netherlands',
   nhat: 'Japan',
   'nhat ban': 'Japan',
   japan: 'Japan',
   'bo bien nga': 'Ivory Coast',
   'ivory coast': 'Ivory Coast',
-  curacao: 'Curacao'
+  curacao: 'Curacao',
+  'tay ban nha': 'Spain'
 };
 
 function normalizeTeamKey(name) {
