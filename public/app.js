@@ -76,6 +76,8 @@ let pendingAdminAction = null;
 let activeTabId = 'openMatchesTab';
 let activeAdminMatchesTab = 'open';
 let maintenanceState = { enabled: false, can_access: true, message: '' };
+let selectedOpenMatchDay = 'ALL';
+let selectedClosedMatchDay = 'ALL';
 
 function tr(key, params = {}, fallback = '') {
   const api = window.__i18n;
@@ -200,6 +202,34 @@ function syncMaintenanceUI() {
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString(currentLocale());
+}
+
+function matchDayKey(iso) {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function matchDayLabel(dayKey) {
+  const [y, m, d] = String(dayKey).split('-');
+  return `${d}/${m}`;
+}
+
+function renderMatchDayTabs(matches, selectedDay, clickHandlerName) {
+  const days = [...new Set(matches.map((m) => matchDayKey(m.kickoff_at)))];
+  if (!days.length) return '';
+  const buttons = [
+    `<button type="button" class="subtab-btn ${selectedDay === 'ALL' ? 'active' : ''}" onclick="${clickHandlerName}('ALL')">Tất cả</button>`,
+    ...days.map((day) => `<button type="button" class="subtab-btn ${selectedDay === day ? 'active' : ''}" onclick="${clickHandlerName}('${day}')">${matchDayLabel(day)}</button>`)
+  ];
+  return `<div class="subtab-bar match-day-tabs">${buttons.join('')}</div>`;
+}
+
+function filterMatchesByDay(matches, selectedDay) {
+  if (selectedDay === 'ALL') return matches;
+  return matches.filter((m) => matchDayKey(m.kickoff_at) === selectedDay);
 }
 
 const TEAM_CATALOG = Array.isArray(window.__TEAM_CATALOG__) ? window.__TEAM_CATALOG__ : [];
@@ -682,16 +712,30 @@ async function renderMatches() {
     `;
   };
 
-  const openRows = data.matches
-    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result)
+  const openMatches = data.matches
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result);
+  const closedMatches = data.matches
+    .filter((m) => Date.now() >= new Date(m.kickoff_at).getTime() || m.result);
+
+  if (selectedOpenMatchDay !== 'ALL' && !openMatches.some((m) => matchDayKey(m.kickoff_at) === selectedOpenMatchDay)) {
+    selectedOpenMatchDay = 'ALL';
+  }
+  if (selectedClosedMatchDay !== 'ALL' && !closedMatches.some((m) => matchDayKey(m.kickoff_at) === selectedClosedMatchDay)) {
+    selectedClosedMatchDay = 'ALL';
+  }
+
+  const filteredOpenMatches = filterMatchesByDay(openMatches, selectedOpenMatchDay);
+  const filteredClosedMatches = filterMatchesByDay(closedMatches, selectedClosedMatchDay);
+
+  const openRows = filteredOpenMatches
     .map((m) => buildRow(m, false))
     .join('');
-  const closedRows = data.matches
-    .filter((m) => Date.now() >= new Date(m.kickoff_at).getTime() || m.result)
+  const closedRows = filteredClosedMatches
     .map((m) => buildRow(m, true))
     .join('');
 
   els.openMatches.innerHTML = `
+    ${renderMatchDayTabs(openMatches, selectedOpenMatchDay, 'setOpenMatchDay')}
     <table class="matches-table">
       <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
       <tbody>${openRows || `<tr><td colspan="6" class="small">${tr('openMatchesEmpty', {}, 'Hiện chưa có trận nào mở cược.')}</td></tr>`}</tbody>
@@ -699,12 +743,23 @@ async function renderMatches() {
   `;
 
   els.closedMatches.innerHTML = `
+    ${renderMatchDayTabs(closedMatches, selectedClosedMatchDay, 'setClosedMatchDay')}
     <table class="matches-table">
       <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
       <tbody>${closedRows || `<tr><td colspan="6" class="small">${tr('closedMatchesEmpty', {}, 'Chưa có trận nào đóng cược.')}</td></tr>`}</tbody>
     </table>
   `;
 }
+
+window.setOpenMatchDay = function (day) {
+  selectedOpenMatchDay = day;
+  renderMatches().catch((e) => setMessage(e.message, 'error'));
+};
+
+window.setClosedMatchDay = function (day) {
+  selectedClosedMatchDay = day;
+  renderMatches().catch((e) => setMessage(e.message, 'error'));
+};
 
 async function renderLeaderboard() {
   const data = await api('/api/leaderboard');

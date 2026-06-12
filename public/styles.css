@@ -106,6 +106,10 @@ button.alt { background: linear-gradient(135deg, #128564, #0c6f53); }
   margin: 14px 0;
 }
 
+.match-day-tabs {
+  margin: 0 0 14px;
+}
+
 .subtab-btn {
   background: #f5e6d3;
   color: var(--ink);
