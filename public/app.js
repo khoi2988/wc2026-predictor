@@ -40,7 +40,8 @@ const els = {
   specialMarkets: document.getElementById('specialMarkets'),
   mySpecialPicks: document.getElementById('mySpecialPicks'),
   health: document.getElementById('health'),
-  adminMatches: document.getElementById('adminMatches'),
+  adminMatchesActive: document.getElementById('adminMatchesActive'),
+  adminMatchesHistory: document.getElementById('adminMatchesHistory'),
   adminPanel: document.getElementById('adminPanel'),
   adminOnlyDailyBonus: document.getElementById('adminOnlyDailyBonus'),
   adminOnlyExtra: document.getElementById('adminOnlyExtra'),
@@ -56,6 +57,8 @@ const els = {
   betConfirmContent: document.getElementById('betConfirmContent'),
   adminConfirmModal: document.getElementById('adminConfirmModal'),
   adminConfirmContent: document.getElementById('adminConfirmContent'),
+  adminMatchesOpenTab: document.getElementById('btnAdminMatchesOpenTab'),
+  adminMatchesHistoryTab: document.getElementById('btnAdminMatchesHistoryTab'),
   tabButtons: Array.from(document.querySelectorAll('.tab-btn')),
   tabPanels: Array.from(document.querySelectorAll('.tab-panel'))
 };
@@ -63,6 +66,7 @@ let currentUser = null;
 let pendingBetPayload = null;
 let pendingAdminAction = null;
 let activeTabId = 'openMatchesTab';
+let activeAdminMatchesTab = 'open';
 
 function tr(key, params = {}, fallback = '') {
   const api = window.__i18n;
@@ -92,6 +96,23 @@ function switchTab(tabId) {
     const isActive = panel.id === tabId;
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
+  }
+}
+
+function switchAdminMatchesTab(tabId) {
+  activeAdminMatchesTab = tabId;
+  const isOpen = tabId === 'open';
+  if (els.adminMatchesOpenTab) {
+    els.adminMatchesOpenTab.classList.toggle('active', isOpen);
+  }
+  if (els.adminMatchesHistoryTab) {
+    els.adminMatchesHistoryTab.classList.toggle('active', !isOpen);
+  }
+  if (els.adminMatchesActive) {
+    els.adminMatchesActive.classList.toggle('hidden', !isOpen);
+  }
+  if (els.adminMatchesHistory) {
+    els.adminMatchesHistory.classList.toggle('hidden', isOpen);
   }
 }
 
@@ -223,6 +244,13 @@ function pickLabel(pick) {
   return tr('pickAwayWin', {}, 'Đội khách thắng');
 }
 
+function matchResultText(match) {
+  if (!match?.result) return tr('resultPending', {}, 'Chưa có kết quả');
+  if (match.result === 'HOME') return tr('betPickWin', { team: match.team_a }, `${match.team_a} thắng`);
+  if (match.result === 'AWAY') return tr('betPickWin', { team: match.team_b }, `${match.team_b} thắng`);
+  return tr('pickDraw', {}, 'Hòa');
+}
+
 function marketLabel(market, line) {
   if (market === 'HANDICAP') return tr('marketHandicap', { line: line ?? 0 }, `Kèo chấp (${line ?? 0})`);
   return tr('market1x2', {}, '1X2');
@@ -305,7 +333,8 @@ async function refresh() {
     els.auth.classList.remove('hidden');
     els.main.classList.add('hidden');
     els.adminPanel.classList.add('hidden');
-    els.adminMatches.innerHTML = '';
+    els.adminMatchesActive.innerHTML = '';
+    els.adminMatchesHistory.innerHTML = '';
     els.adminUsers.innerHTML = '';
     els.currentUserLabel.textContent = '';
     els.fullNameLockCard.classList.add('hidden');
@@ -364,7 +393,8 @@ async function renderAdminMatches() {
     const canDelete = Boolean(currentUser && currentUser.is_admin);
     const data = await adminApi('/api/admin/matches');
     const activeMatches = data.matches.filter((m) => !m.result);
-    const rows = activeMatches.map((m) => `
+    const settledMatches = data.matches.filter((m) => m.result);
+    const activeRows = activeMatches.map((m) => `
       <tr>
         <td>${m.id}</td>
         <td>${m.team_a}</td>
@@ -405,9 +435,26 @@ async function renderAdminMatches() {
         </td>
       </tr>
     `).join('');
-    els.adminMatches.innerHTML = activeMatches.length
-      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${rows}</tbody></table>`
+    const settledRows = settledMatches.map((m) => `
+      <tr>
+        <td>${m.id}</td>
+        <td>${m.team_a}</td>
+        <td>${m.team_b}</td>
+        <td>${fmtTime(m.kickoff_at)}</td>
+        <td>${marketLabel(m.bet_mode, m.handicap_line)}</td>
+        <td>${matchResultText(m)}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
+        <td>
+          ${canSetResult ? `<button onclick="exportMatchSettlement(${m.id})">Export kết quả</button>` : ''}
+          ${currentUser?.is_admin ? `<button onclick="recalculateMatch(${m.id})">Tính lại trả thưởng</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+    els.adminMatchesActive.innerHTML = activeMatches.length
+      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${activeRows}</tbody></table>`
       : `<p class="small">Hiện không còn trận nào chờ set kèo/kết quả.</p>`;
+    els.adminMatchesHistory.innerHTML = settledMatches.length
+      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${settledRows}</tbody></table>`
+      : `<p class="small">Hiện chưa có trận nào đã chốt kết quả.</p>`;
     for (const m of activeMatches) {
       syncRowModeUI(m.id);
       const modeEl = document.getElementById(`mode-${m.id}`);
@@ -415,8 +462,10 @@ async function renderAdminMatches() {
         modeEl.onchange = () => syncRowModeUI(m.id);
       }
     }
+    switchAdminMatchesTab(activeAdminMatchesTab);
   } catch (e) {
-    els.adminMatches.innerHTML = `<p class="small error">${e.message}</p>`;
+    els.adminMatchesActive.innerHTML = `<p class="small error">${e.message}</p>`;
+    els.adminMatchesHistory.innerHTML = '';
   }
 }
 
@@ -529,8 +578,9 @@ document.getElementById('btnSaveSpecialConfig').onclick = async () => {
 async function renderMatches() {
   const data = await api('/api/matches');
   const buildRow = (m, closed) => {
+    const resultText = m.result ? matchResultText(m) : tr('resultPending', {}, 'Chưa có kết quả');
     const result = m.result
-      ? tr('resultLabel', { result: pickLabel(m.result) }, `KQ: ${pickLabel(m.result)}`)
+      ? tr('resultLabel', { result: resultText }, `KQ: ${resultText}`)
       : tr('resultPending', {}, 'Chưa có kết quả');
     const mode = String(m.bet_mode || '1X2');
     const odds1Cell = mode === '1X2'
@@ -1103,6 +1153,13 @@ setInterval(() => {
 for (const button of els.tabButtons) {
   button.onclick = () => switchTab(button.dataset.tab);
 }
+if (els.adminMatchesOpenTab) {
+  els.adminMatchesOpenTab.onclick = () => switchAdminMatchesTab('open');
+}
+if (els.adminMatchesHistoryTab) {
+  els.adminMatchesHistoryTab.onclick = () => switchAdminMatchesTab('history');
+}
 switchTab(activeTabId);
+switchAdminMatchesTab(activeAdminMatchesTab);
 document.getElementById('newBetMode').onchange = syncNewMatchModeUI;
 syncNewMatchModeUI();

@@ -99,6 +99,26 @@ button.alt { background: linear-gradient(135deg, #128564, #0c6f53); }
   border-bottom: 1px solid var(--line);
 }
 
+.subtab-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.subtab-btn {
+  background: #f5e6d3;
+  color: var(--ink);
+  border: 1px solid #d9c5aa;
+  box-shadow: none;
+}
+
+.subtab-btn.active {
+  background: linear-gradient(135deg, #128564, #0c6f53);
+  color: #fff;
+  border-color: transparent;
+}
+
 .lang-switch {
   display: inline-flex;
   gap: 6px;
