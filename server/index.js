@@ -8,6 +8,7 @@ const { createClient } = require('@supabase/supabase-js');
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const STARTING_POINTS = 1000;
+const MAX_PLAYERS = 100;
 const RESET_PASSWORD_DEFAULT = '123456';
 const SPECIAL_BONUS_POINTS = 5000;
 const SPECIAL_PREDICTION_DEADLINE_ISO = '2026-06-14T16:59:59.999Z';
@@ -692,6 +693,10 @@ app.post('/api/register', async (req, res) => {
   const password = String(req.body.password || '');
   const fullName = String(req.body.fullName || '').trim();
 
+  if (db.users.length >= MAX_PLAYERS) {
+    return res.status(400).json({ error: `Player limit reached (${MAX_PLAYERS}).` });
+  }
+
   if (username.length < 3 || username.length > 24) {
     return res.status(400).json({ error: 'Username must be 3-24 characters.' });
   }
@@ -791,8 +796,7 @@ app.get('/api/leaderboard', (req, res) => {
         points_total: pointsTotal
       };
     })
-    .sort((a, b) => (b.points_total - a.points_total) || (b.points_available - a.points_available) || a.username.localeCompare(b.username))
-    .slice(0, 50);
+    .sort((a, b) => (b.points_total - a.points_total) || (b.points_available - a.points_available) || a.username.localeCompare(b.username));
 
   res.json({ leaderboard });
 });
