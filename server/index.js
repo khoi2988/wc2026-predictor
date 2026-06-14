@@ -992,6 +992,45 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   res.json({ users });
 });
 
+app.get('/api/admin/bets-audit', requireAdmin, (req, res) => {
+  const currentUserId = req.session.user.id;
+  const matches = [...db.matches]
+    .sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at))
+    .map((match) => {
+      const bets = db.bets
+        .filter((bet) => bet.match_id === match.id)
+        .map((bet) => {
+          const user = db.users.find((u) => u.id === bet.user_id);
+          return {
+            id: bet.id,
+            user_id: bet.user_id,
+            username: user?.username || '',
+            full_name: user?.full_name || '',
+            market: bet.market || '1X2',
+            pick: bet.pick,
+            stake: bet.stake,
+            odds: bet.odds,
+            status: bet.status,
+            payout: bet.payout,
+            created_at: bet.created_at
+          };
+        });
+
+      return {
+        id: match.id,
+        team_a: match.team_a,
+        team_b: match.team_b,
+        kickoff_at: match.kickoff_at,
+        result: match.result || null,
+        total_bets: bets.length,
+        current_user_bets: bets.filter((bet) => bet.user_id === currentUserId).length,
+        bets
+      };
+    });
+
+  res.json({ matches });
+});
+
 app.post('/api/admin/users/:id/permissions', requireAdmin, (req, res) => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId)) return res.status(400).json({ error: 'Invalid user id.' });
@@ -1201,9 +1240,9 @@ app.get('/api/admin/users/:id/export', requireAdmin, (req, res) => {
       return {
         bet_id: b.id,
         username: user.username,
-        team_a: m?.team_a || '',
-        team_b: m?.team_b || '',
-        kickoff_at: m?.kickoff_at || '',
+        team_a: m?.team_a || b.match_team_a || '',
+        team_b: m?.team_b || b.match_team_b || '',
+        kickoff_at: m?.kickoff_at || b.match_kickoff_at || '',
         market: b.market || '1X2',
         handicap_line: b.handicap_line ?? '',
         pick: b.pick,
@@ -1325,9 +1364,9 @@ app.get('/api/my-bets', requireAuth, (req, res) => {
       const m = db.matches.find((x) => x.id === b.match_id);
       return {
         ...b,
-        team_a: m?.team_a,
-        team_b: m?.team_b,
-        kickoff_at: m?.kickoff_at,
+        team_a: m?.team_a || b.match_team_a || '',
+        team_b: m?.team_b || b.match_team_b || '',
+        kickoff_at: m?.kickoff_at || b.match_kickoff_at || b.created_at,
         result: m?.result || null
       };
     })
@@ -1386,6 +1425,9 @@ app.post('/api/bets', requireAuth, (req, res) => {
     id: db.nextBetId++,
     user_id: user.id,
     match_id: matchId,
+    match_team_a: match.team_a,
+    match_team_b: match.team_b,
+    match_kickoff_at: match.kickoff_at,
     market,
     pick,
     stake,
@@ -1565,17 +1607,15 @@ app.delete('/api/admin/matches/:id', requireAdmin, (req, res) => {
   if (match.result) return res.status(400).json({ error: 'Cannot delete settled match.' });
 
   const relatedBets = db.bets.filter((b) => b.match_id === matchId);
-  for (const bet of relatedBets) {
-    const user = db.users.find((u) => u.id === bet.user_id);
-    if (user) {
-      user.points += bet.stake;
-    }
+  if (relatedBets.length > 0) {
+    return res.status(400).json({
+      error: `Không thể xóa trận đã có ${relatedBets.length} cược vì sẽ làm mất lịch sử cược. Hãy chốt kết quả hoặc giữ trận này trong hệ thống.`
+    });
   }
 
-  db.bets = db.bets.filter((b) => b.match_id !== matchId);
   db.matches.splice(idx, 1);
   saveDb();
-  res.json({ ok: true, refundedBets: relatedBets.length });
+  res.json({ ok: true, refundedBets: 0 });
 });
 
 app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) => {

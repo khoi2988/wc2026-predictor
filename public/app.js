@@ -292,6 +292,14 @@ function matchResultText(match) {
   return tr('pickDraw', {}, 'Hòa');
 }
 
+function betMatchResultText(bet) {
+  return matchResultText({
+    result: bet.result,
+    team_a: bet.team_a,
+    team_b: bet.team_b
+  });
+}
+
 function marketLabel(market, line) {
   if (market === 'HANDICAP') return tr('marketHandicap', { line: line ?? 0 }, `Kèo chấp (${line ?? 0})`);
   return tr('market1x2', {}, '1X2');
@@ -780,11 +788,15 @@ async function renderMyBets() {
   const data = await api('/api/my-bets');
   const rows = data.bets.map((b) => `
     <tr>
-      <td>${b.team_a} vs ${b.team_b}</td>
+      <td>
+        ${b.team_a || '-'} vs ${b.team_b || '-'}
+        <br><span class="small">#${b.match_id} / bet #${b.id}</span>
+      </td>
       <td>${marketLabel(b.market, b.handicap_line)}</td>
       <td>${betPickText(b)}</td>
       <td>${b.stake}</td>
       <td>${b.odds}</td>
+      <td>${betMatchResultText(b)}</td>
       <td>${betStatusText(b.status)}</td>
       <td>${b.payout ?? '-'}</td>
       <td>
@@ -795,7 +807,7 @@ async function renderMyBets() {
     </tr>
   `).join('');
 
-  els.myBets.innerHTML = `<table><thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableMode', {}, 'Thể thức')}</th><th>${tr('myBetsChoice', {}, 'Chọn')}</th><th>${tr('myBetsStake', {}, 'Cược')}</th><th>${tr('myBetsOdds', {}, 'Tỷ lệ')}</th><th>${tr('myBetsResult', {}, 'KQ')}</th><th>${tr('myBetsPayout', {}, 'Thưởng')}</th><th>${tr('myBetsAction', {}, 'Hành động')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.myBets.innerHTML = `<table><thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableMode', {}, 'Thể thức')}</th><th>${tr('myBetsChoice', {}, 'Chọn')}</th><th>${tr('myBetsStake', {}, 'Cược')}</th><th>${tr('myBetsOdds', {}, 'Tỷ lệ')}</th><th>Kết quả trận</th><th>Trạng thái cược</th><th>${tr('myBetsPayout', {}, 'Thưởng')}</th><th>${tr('myBetsAction', {}, 'Hành động')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 window.placeBet = async function (matchId, market = '1X2') {
@@ -1189,6 +1201,9 @@ window.exportMatchSettlement = function (matchId) {
 
 window.deleteMatch = async function (matchId) {
   try {
+    if (!window.confirm('Xóa trận chỉ nên dùng khi chưa có ai đặt cược. Bạn chắc chắn muốn xóa trận này?')) {
+      return;
+    }
     const result = await adminApi(`/api/admin/matches/${matchId}`, { method: 'DELETE' });
     setMessage(`Xóa trận thành công. Hoàn ${result.refundedBets || 0} cược.`, 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
