@@ -1,88 +1,85 @@
-# World Cup 2026 LAN Predictor
+# World Cup 2026 Predictor
 
-Web app cho team (~50 nguoi) dang ky/dang nhap, dat cuoc bang diem noi bo.
+Web app dự đoán World Cup 2026 cho team nội bộ.
 
-## Tinh nang
-- Dang ky / dang nhap tai khoan
-- Moi user co `1000` diem khoi tao
-- Dat cuoc 1 lan / tran (`HOME`, `DRAW`, `AWAY`)
-- Tru diem khi dat, cong diem khi thang theo odds
-- Bang xep hang theo tong diem
-- Endpoint admin de nhap ket qua tran va settle
-- Admin panel thu cong ngay tren web: them/xoa tran, settle ket qua
-- Dong bo tran + kickoff + odds tu The Odds API (manual + auto)
+Người chơi có thể:
+- đăng ký / đăng nhập
+- nhận điểm khởi tạo
+- đặt cược theo kèo `1X2` hoặc `kèo chấp`
+- xem bảng xếp hạng
+- xem lịch sử cược
+- tham gia các dự đoán vui
 
-## Chay local/LAN
-1. Cai dependency:
+Admin / operator có thể:
+- thêm / sửa / xóa trận
+- set kèo
+- chốt kết quả
+- export lịch sử
+- cộng / trừ / reset điểm
+- bật bảo trì
+- chuẩn hóa tên đội
+
+## Công nghệ
+- Node.js
+- Express
+- express-session
+- Supabase (tùy chọn, để lưu dữ liệu online)
+- Render (tùy chọn, để deploy)
+
+## Cấu trúc thư mục
+- `server/`: backend Express
+- `public/`: frontend tĩnh
+- `public/team-catalog.js`: catalog đội tuyển + alias + cờ
+- `data.json`: dữ liệu local fallback
+- `.env.example`: mẫu biến môi trường
+- `HANDOVER.md`: tài liệu bàn giao cho dev khác
+
+## Yêu cầu
+- Node.js 20+ hoặc 22+
+- npm
+
+## Chạy local
+1. Cài package:
    ```bash
    npm install
    ```
-2. Chay server:
-   ```powershell
-   $env:SESSION_SECRET="your-secret"
-   $env:ADMIN_USERNAME="admin"
-   $env:ADMIN_PASSWORD="admin123"
-   # optional: bat dong bo odds tu API
-   $env:ODDS_PROVIDER="api-football" # hoac "the-odds-api"
-   $env:ODDS_API_KEY="your-odds-api-key"
-   $env:ODDS_SPORT="soccer_fifa_world_cup"
-   $env:ODDS_REGIONS="eu"
-   $env:ODDS_MARKETS="h2h"
-   # API-Football mode:
-   $env:APIFOOTBALL_KEY="your-api-football-key"
-   $env:APIFOOTBALL_LEAGUE="1"
-   $env:APIFOOTBALL_SEASON="2026"
-   # optional:
-   # $env:APIFOOTBALL_BOOKMAKER="6"
-   $env:ODDS_SYNC_INTERVAL_MS="300000"
+2. Tạo file `.env` từ `.env.example`
+3. Chạy app:
+   ```bash
    npm start
    ```
-3. Truy cap:
-   - Tren may chu: `http://localhost:3000`
-   - Tren may trong LAN: `http://<IP-LAN-cua-may-chu>:3000`
+4. Mở:
+   - local: [http://localhost:3000](http://localhost:3000)
+   - LAN: `http://<ip-máy-chủ>:3000`
 
-Server bind `0.0.0.0` nen may trong mang LAN co the vao duoc.
+## Biến môi trường
+Các biến chính:
+- `SESSION_SECRET`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-## Admin settle ket qua
-Dang nhap bang tai khoan admin de dung trang Admin tren web.
-Neu goi API truc tiep, can dang nhap truoc de co session.
+Các biến tùy chọn cho odds API:
+- `ODDS_PROVIDER`
+- `ODDS_API_KEY`
+- `ODDS_SPORT`
+- `ODDS_REGIONS`
+- `ODDS_MARKETS`
+- `ODDS_BOOKMAKERS`
+- `ODDS_SYNC_INTERVAL_MS`
+- `APIFOOTBALL_KEY`
+- `APIFOOTBALL_LEAGUE`
+- `APIFOOTBALL_SEASON`
+- `APIFOOTBALL_BOOKMAKER`
 
-```bash
-curl -X POST http://<IP-LAN-cua-may-chu>:3000/api/admin/settle ^
-  -H "Content-Type: application/json" ^
-  -d "{\"matchId\":1,\"result\":\"HOME\"}"
-```
+Xem mẫu đầy đủ ở `D:\AI\FC Online\Project 4\.env.example`
 
-`result` nhan 1 trong 3 gia tri: `HOME`, `DRAW`, `AWAY`.
+## Supabase
+Nếu muốn dữ liệu online thay vì lưu local:
 
-## Admin sync odds
-Dong bo ngay lap tuc tu The Odds API:
-
-```bash
-curl -X POST http://<IP-LAN-cua-may-chu>:3000/api/admin/sync-odds ^
-  -b cookie.txt -c cookie.txt
-```
-
-Xem trang thai sync:
-
-```bash
-curl http://<IP-LAN-cua-may-chu>:3000/api/admin/sync-status ^
-  -b cookie.txt -c cookie.txt
-```
-
-Neu co `ODDS_API_KEY`, server se tu sync theo chu ky `ODDS_SYNC_INTERVAL_MS` (mac dinh 5 phut).
-Neu `ODDS_PROVIDER=api-football` thi server dung endpoint `https://v3.football.api-sports.io/odds` va can `APIFOOTBALL_LEAGUE`, `APIFOOTBALL_SEASON`.
-
-## Luu y
-- Day la app game vui noi bo, khong dung tien that.
-- Odds seed mau van co san de test. Khi bat API, du lieu moi se duoc upsert vao file `data.json`.
-- Nen dat `ADMIN_PASSWORD` manh truoc khi mo LAN.
-
-## Online DB (Supabase Free)
-De du lieu khong phu thuoc may local/instance Render, dung Supabase Postgres lam remote state.
-
-1. Tao project Supabase free.
-2. Vao SQL Editor, chay:
+1. Tạo project Supabase
+2. Chạy SQL:
    ```sql
    create table if not exists public.app_state (
      id bigint primary key,
@@ -90,14 +87,27 @@ De du lieu khong phu thuoc may local/instance Render, dung Supabase Postgres lam
      updated_at timestamptz not null default now()
    );
    ```
-3. Lay 2 gia tri:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY` (Project Settings -> API)
-4. Tren Render, them env:
+3. Lấy:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
-5. Redeploy.
+4. Set vào env
 
-Neu co 2 env tren, app se luu/doi du lieu tren Supabase.
-Neu thieu env, app fallback ve `data.json`.
+Khi có đủ 2 biến trên, app sẽ ưu tiên lưu dữ liệu trên Supabase.
 
+## Render
+Nếu deploy lên Render:
+- Build command: `npm install`
+- Start command: `npm start`
+- nhớ set env giống trong `.env.example`
+
+## Gợi ý bàn giao cho dev khác
+1. Gửi repo GitHub
+2. Gửi file zip sạch
+3. Gửi `HANDOVER.md`
+4. Gửi `.env.example`
+5. Không gửi `.env` thật hoặc secret key thật qua chat công khai
+
+## Lưu ý
+- `node_modules/`, `.env`, `data.json` không nên commit để bàn giao
+- nếu đổi catalog đội tuyển, có thể vào admin và bấm `Chuẩn hóa tên đội`
+- nếu dữ liệu live đang dùng Supabase, dev mới cần được cấp quyền vào Supabase và Render

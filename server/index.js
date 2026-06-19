@@ -135,6 +135,9 @@ for (const user of db.users) {
   if (typeof user.can_set_result !== 'boolean') {
     user.can_set_result = false;
   }
+  if (typeof user.can_export_user_history !== 'boolean') {
+    user.can_export_user_history = false;
+  }
   if (!Number.isInteger(user.daily_bonus_days_awarded)) {
     user.daily_bonus_days_awarded = 0;
   }
@@ -193,6 +196,7 @@ function ensureAdminUser() {
     existing.is_admin = true;
     existing.can_manage_odds = true;
     existing.can_set_result = true;
+    existing.can_export_user_history = true;
     if (!existing.full_name || !String(existing.full_name).trim()) {
       existing.full_name = 'Quản trị viên';
     }
@@ -208,6 +212,7 @@ function ensureAdminUser() {
     is_admin: true,
     can_manage_odds: true,
     can_set_result: true,
+    can_export_user_history: true,
     full_name: 'Quản trị viên',
     created_at: new Date().toISOString()
   });
@@ -240,6 +245,7 @@ async function loadDbRemoteIfEnabled() {
       if (typeof user.is_admin !== 'boolean') user.is_admin = false;
       if (typeof user.can_manage_odds !== 'boolean') user.can_manage_odds = false;
       if (typeof user.can_set_result !== 'boolean') user.can_set_result = false;
+      if (typeof user.can_export_user_history !== 'boolean') user.can_export_user_history = false;
       if (!Number.isInteger(user.daily_bonus_days_awarded)) user.daily_bonus_days_awarded = 0;
     }
     for (const match of db.matches) {
@@ -740,6 +746,7 @@ function sanitizeUser(user) {
     is_admin: Boolean(user.is_admin),
     can_manage_odds: Boolean(user.can_manage_odds),
     can_set_result: Boolean(user.can_set_result),
+    can_export_user_history: Boolean(user.can_export_user_history),
     created_at: user.created_at
   };
 }
@@ -977,7 +984,7 @@ app.post('/api/profile/full-name', requireAuth, (req, res) => {
   res.json({ ok: true, user: sanitizeUser(user) });
 });
 
-app.get('/api/admin/users', requireAdmin, (req, res) => {
+app.get('/api/admin/users', requirePermission('can_export_user_history'), (req, res) => {
   const users = db.users
     .map((u) => ({
       id: u.id,
@@ -986,7 +993,8 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
       points: u.points,
       is_admin: Boolean(u.is_admin),
       can_manage_odds: Boolean(u.can_manage_odds),
-      can_set_result: Boolean(u.can_set_result)
+      can_set_result: Boolean(u.can_set_result),
+      can_export_user_history: Boolean(u.can_export_user_history)
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
   res.json({ users });
@@ -1040,6 +1048,7 @@ app.post('/api/admin/users/:id/permissions', requireAdmin, (req, res) => {
 
   user.can_manage_odds = Boolean(req.body.canManageOdds);
   user.can_set_result = Boolean(req.body.canSetResult);
+  user.can_export_user_history = Boolean(req.body.canExportUserHistory);
   saveDb();
   res.json({ ok: true, user: sanitizeUser(user) });
 });
@@ -1226,7 +1235,7 @@ app.post('/api/admin/specials/:key/settle', requireAdmin, (req, res) => {
   res.json({ ok: true, winners });
 });
 
-app.get('/api/admin/users/:id/export', requireAdmin, (req, res) => {
+app.get('/api/admin/users/:id/export', requirePermission('can_export_user_history'), (req, res) => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId)) return res.status(400).json({ error: 'Invalid user id.' });
 

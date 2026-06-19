@@ -51,6 +51,7 @@ const els = {
   adminPanel: document.getElementById('adminPanel'),
   adminOnlyDailyBonus: document.getElementById('adminOnlyDailyBonus'),
   maintenanceConfigBlock: document.getElementById('maintenanceConfigBlock'),
+  adminUserExportBlock: document.getElementById('adminUserExportBlock'),
   adminOnlyExtra: document.getElementById('adminOnlyExtra'),
   matchCreateRow: document.getElementById('matchCreateRow'),
   adminUsers: document.getElementById('adminUsers'),
@@ -415,15 +416,20 @@ async function refresh() {
 
   els.auth.classList.add('hidden');
   els.main.classList.remove('hidden');
-  const canOperate = user.is_admin || user.can_manage_odds || user.can_set_result;
+  const canOperate = user.is_admin || user.can_manage_odds || user.can_set_result || user.can_export_user_history;
   currentUser = user;
   if (canOperate) {
+    const canManageOdds = user.is_admin || user.can_manage_odds;
+    const canSetResult = user.is_admin || user.can_set_result;
+    const canExportUsers = user.is_admin || user.can_export_user_history;
     els.adminPanel.classList.remove('hidden');
     els.adminOnlyDailyBonus.classList.toggle('hidden', !user.is_admin);
     els.maintenanceConfigBlock.classList.toggle('hidden', !user.is_admin);
+    els.adminUserExportBlock.classList.toggle('hidden', !canExportUsers);
     els.adminOnlyExtra.classList.toggle('hidden', !user.is_admin);
-    els.matchCreateRow.classList.toggle('hidden', !(user.is_admin || user.can_manage_odds));
-    document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !user.is_admin);
+    els.matchCreateRow.classList.toggle('hidden', !canManageOdds);
+    document.getElementById('btnAdminLoad').classList.toggle('hidden', !(canManageOdds || canSetResult));
+    document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !canExportUsers);
     if (user.is_admin) {
       await Promise.all([renderDailyBonusConfig(), renderMaintenanceConfig()]);
     }
@@ -553,16 +559,23 @@ async function renderAdminMatches() {
 
 async function renderAdminUsers() {
   try {
+    const isAdmin = Boolean(currentUser?.is_admin);
     const data = await adminApi('/api/admin/users');
     const rows = data.users.map((u) => `
       <tr>
         <td>${u.id}</td>
         <td>${u.username}${u.is_admin ? ' (admin)' : ''}<br><span class="small">${u.full_name || '-'}</span></td>
+        <td>
+          <button onclick="exportUserHistory(${u.id})">Export lịch sử</button>
+          ${isAdmin ? `<button onclick="resetUserPassword(${u.id})">Reset password</button>` : ''}
+        </td>
+        ${isAdmin ? `
         <td>${u.points}</td>
         <td>
           ${u.is_admin ? '<span class="small">Full</span>' : `
             <label><input type="checkbox" id="perm-odds-${u.id}" ${u.can_manage_odds ? 'checked' : ''} /> Set kèo</label><br>
             <label><input type="checkbox" id="perm-result-${u.id}" ${u.can_set_result ? 'checked' : ''} /> Set tỷ số/KQ</label><br>
+            <label><input type="checkbox" id="perm-export-${u.id}" ${u.can_export_user_history ? 'checked' : ''} /> Export lịch sử user</label><br>
             <button onclick="savePermissions(${u.id})">Lưu quyền</button>
           `}
         </td>
@@ -570,12 +583,13 @@ async function renderAdminUsers() {
           <input id="delta-${u.id}" type="number" step="1" value="100" style="width:90px" />
           <button onclick="adjustPoints(${u.id}, 1)">Cộng</button>
           <button onclick="adjustPoints(${u.id}, -1)">Trừ</button>
-          <button onclick="resetUserPassword(${u.id})">Reset password</button>
-          <button onclick="exportUserHistory(${u.id})">Export lịch sử</button>
         </td>
+        ` : ''}
       </tr>
     `).join('');
-    els.adminUsers.innerHTML = `<table><thead><tr><th>ID</th><th>User</th><th>Điểm</th><th>Phân quyền</th><th>Điều chỉnh</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminUsers.innerHTML = isAdmin
+      ? `<table><thead><tr><th>ID</th><th>User</th><th>Xuất lịch sử</th><th>Điểm</th><th>Phân quyền</th><th>Điều chỉnh</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<table><thead><tr><th>ID</th><th>User</th><th>Xuất lịch sử</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
     els.adminUsers.innerHTML = `<p class="small error">${e.message}</p>`;
   }
@@ -1235,9 +1249,10 @@ window.savePermissions = async function (userId) {
   try {
     const canManageOdds = document.getElementById(`perm-odds-${userId}`)?.checked;
     const canSetResult = document.getElementById(`perm-result-${userId}`)?.checked;
+    const canExportUserHistory = document.getElementById(`perm-export-${userId}`)?.checked;
     await adminApi(`/api/admin/users/${userId}/permissions`, {
       method: 'POST',
-      body: JSON.stringify({ canManageOdds, canSetResult })
+      body: JSON.stringify({ canManageOdds, canSetResult, canExportUserHistory })
     });
     setMessage('Cập nhật quyền thành công', 'success');
     await renderAdminUsers();
