@@ -12,6 +12,7 @@ const MAX_PLAYERS = 100;
 const RESET_PASSWORD_DEFAULT = '123456';
 const SPECIAL_BONUS_POINTS = 5000;
 const SPECIAL_PREDICTION_DEADLINE_ISO = '2026-06-14T16:59:59.999Z';
+const APP_TZ_OFFSET_MINUTES = 7 * 60;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-this-secret-in-production';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -320,14 +321,24 @@ function toDateOnlyKey(dateObj) {
   return `${y}-${m}-${d}`;
 }
 
+function toOffsetDateParts(dateObj, offsetMinutes = APP_TZ_OFFSET_MINUTES) {
+  const shifted = new Date(dateObj.getTime() + offsetMinutes * 60000);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate()
+  };
+}
+
 function calculateBonusTargetDays(now = new Date()) {
   const cfg = db.dailyBonus;
   if (!cfg?.enabled || !cfg.start_date || !Number.isInteger(cfg.points_per_day) || cfg.points_per_day <= 0) return 0;
   const start = parseLocalDateToUtc(cfg.start_date);
   if (!start) return 0;
 
-  const nowLocalDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startLocalDay = new Date(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const nowParts = toOffsetDateParts(now);
+  const startLocalDay = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const nowLocalDay = new Date(Date.UTC(nowParts.year, nowParts.month, nowParts.day));
   const diffDays = Math.floor((nowLocalDay - startLocalDay) / 86400000);
   if (diffDays < 0) return 0;
   return diffDays + 1;
