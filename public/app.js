@@ -677,12 +677,24 @@ document.getElementById('btnSaveSpecialConfig').onclick = async () => {
 };
 
 async function renderMatches() {
-  const data = await api('/api/matches');
+  const [data, myBetsData] = await Promise.all([
+    api('/api/matches'),
+    api('/api/my-bets')
+  ]);
+  const myOpenMatchIds = new Set(
+    (myBetsData.bets || [])
+      .filter((b) => b.status === 'open')
+      .map((b) => b.match_id)
+  );
   const buildRow = (m, closed) => {
     const resultText = m.result ? matchResultText(m) : tr('resultPending', {}, 'Chưa có kết quả');
     const result = m.result
       ? tr('resultLabel', { result: resultText }, `KQ: ${resultText}`)
       : tr('resultPending', {}, 'Chưa có kết quả');
+    const hasMyBet = myOpenMatchIds.has(m.id);
+    const openStatus = hasMyBet
+      ? tr('matchAlreadyBet', {}, 'Đã đặt cược')
+      : tr('matchNotYetBet', {}, 'Chưa đặt cược');
     const mode = String(m.bet_mode || '1X2');
     const odds1Cell = mode === '1X2'
       ? `<div class="odds-block"><div>${tr('odds1Text', { team: teamLabel(m.team_a) }, `Kèo 1: ${teamLabel(m.team_a)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_home }, `Tỷ lệ: ${m.odds_home}`)}</span></div>`
@@ -703,7 +715,11 @@ async function renderMatches() {
         <td>${odds1Cell}</td>
         <td>${oddsXCell}</td>
         <td>${odds2Cell}</td>
-        <td><span class="status-pill ${closed ? 'status-closed' : 'status-open'}">${result}</span></td>
+        <td>
+          ${closed
+            ? `<span class="status-pill status-closed">${result}</span>`
+            : `<span class="status-pill ${hasMyBet ? 'status-closed' : 'status-open'}">${openStatus}</span><div class="small match-substatus">${tr('resultPending', {}, 'Chưa có kết quả')}</div>`}
+        </td>
         <td>
           ${closed ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
             ${mode === 'HANDICAP' ? `
