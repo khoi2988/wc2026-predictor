@@ -54,9 +54,9 @@ function defaultDb() {
     lastSyncAt: null,
     lastSyncError: null,
     specialMarkets: [
-      { key: 'wc_champion', title: 'Dự đoán đội vô địch World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS },
-      { key: 'wc_top_scorer', title: 'Dự đoán vua phá lưới World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS },
-      { key: 'wc_best_goalkeeper', title: 'Dự đoán thủ môn xuất sắc nhất World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS }
+      { key: 'wc_champion', title: 'Dự đoán đội vô địch World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS, lock_mode: 'default' },
+      { key: 'wc_top_scorer', title: 'Dự đoán vua phá lưới World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS, lock_mode: 'default' },
+      { key: 'wc_best_goalkeeper', title: 'Dự đoán thủ môn xuất sắc nhất World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS, lock_mode: 'default' }
     ],
     specialPicks: [],
     specialPredictionConfig: {
@@ -190,6 +190,9 @@ if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') {
 }
 for (const market of db.specialMarkets) {
   market.bonus_points = SPECIAL_BONUS_POINTS;
+  if (!['default', 'open', 'locked'].includes(market.lock_mode)) {
+    market.lock_mode = 'default';
+  }
 }
 
 function ensureAdminUser() {
@@ -278,6 +281,9 @@ async function loadDbRemoteIfEnabled() {
     if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') db.specialPredictionConfig.manually_locked = false;
     for (const market of db.specialMarkets) {
       market.bonus_points = SPECIAL_BONUS_POINTS;
+      if (!['default', 'open', 'locked'].includes(market.lock_mode)) {
+        market.lock_mode = 'default';
+      }
     }
     fs.writeFileSync(dbPath, JSON.stringify(db, null, 2));
     return;
@@ -308,6 +314,14 @@ function isSpecialPredictionLocked(now = new Date()) {
   if (cfg.manually_locked) return true;
   const deadlineIso = cfg.deadline_iso || SPECIAL_PREDICTION_DEADLINE_ISO;
   return now.getTime() > new Date(deadlineIso).getTime();
+}
+
+function isSpecialMarketLocked(market, now = new Date()) {
+  if (!market) return true;
+  if (market.result) return true;
+  if (market.lock_mode === 'open') return false;
+  if (market.lock_mode === 'locked') return true;
+  return isSpecialPredictionLocked(now);
 }
 
 function formatSpecialPredictionDeadlineText(deadlineIso) {
@@ -968,7 +982,10 @@ app.get('/api/specials', requireAuth, (req, res) => {
       };
     });
   res.json({
-    markets: db.specialMarkets,
+    markets: db.specialMarkets.map((m) => ({
+      ...m,
+      locked: isSpecialMarketLocked(m)
+    })),
     picks,
     locked,
     deadline_iso: db.specialPredictionConfig.deadline_iso,
@@ -980,13 +997,12 @@ app.post('/api/specials/picks', requireAuth, (req, res) => {
   const marketKey = String(req.body.marketKey || '').trim();
   const prediction = String(req.body.prediction || '').trim();
   if (!marketKey || !prediction) return res.status(400).json({ error: 'Missing market or prediction.' });
-  if (isSpecialPredictionLocked()) {
-    return res.status(400).json({ error: 'Đã hết hạn dự đoán vui (sau 23:59 ngày 14/06/2026 GMT+7).' });
-  }
 
   const market = db.specialMarkets.find((m) => m.key === marketKey);
   if (!market) return res.status(404).json({ error: 'Market not found.' });
-  if (market.result) return res.status(400).json({ error: 'Market already settled.' });
+  if (isSpecialMarketLocked(market)) {
+    return res.status(400).json({ error: 'Hạng mục dự đoán này đang bị khóa.' });
+  }
 
   const existing = db.specialPicks.find((p) => p.user_id === req.session.user.id && p.market_key === marketKey);
   if (existing) {
@@ -1215,7 +1231,8 @@ app.get('/api/admin/specials', requireAdmin, (req, res) => {
   const locked = isSpecialPredictionLocked();
   const markets = db.specialMarkets.map((m) => ({
     ...m,
-    total_picks: db.specialPicks.filter((p) => p.market_key === m.key).length
+    total_picks: db.specialPicks.filter((p) => p.market_key === m.key).length,
+    locked: isSpecialMarketLocked(m)
   }));
   res.json({
     markets,
@@ -1224,6 +1241,21 @@ app.get('/api/admin/specials', requireAdmin, (req, res) => {
     deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso),
     manually_locked: Boolean(db.specialPredictionConfig.manually_locked)
   });
+});
+
+app.post('/api/admin/specials/:key/lock-mode', requireAdmin, (req, res) => {
+  const key = String(req.params.key || '').trim();
+  const lockMode = String(req.body.lockMode || 'default').trim();
+  if (!['default', 'open', 'locked'].includes(lockMode)) {
+    return res.status(400).json({ error: 'Lock mode không hợp lệ.' });
+  }
+
+  const market = db.specialMarkets.find((m) => m.key === key);
+  if (!market) return res.status(404).json({ error: 'Market not found.' });
+
+  market.lock_mode = lockMode;
+  saveDb();
+  res.json({ ok: true, market: { ...market, locked: isSpecialMarketLocked(market) } });
 });
 
 app.post('/api/admin/specials/config', requireAdmin, (req, res) => {

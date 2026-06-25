@@ -602,20 +602,20 @@ async function renderAdminUsers() {
 
 async function renderSpecials() {
   const data = await api('/api/specials');
-  const actionColLabel = data.locked ? 'Đã khóa' : 'Thao tác';
+  const actionColLabel = 'Thao tác';
   const formRows = data.markets.map((m) => `
     <tr>
       <td>${m.title}</td>
       <td>${m.result || '-'}</td>
       <td>
-        <input id="special-${m.key}" placeholder="Nhập dự đoán..." style="min-width:240px" ${data.locked || m.result ? 'disabled' : ''} />
+        <input id="special-${m.key}" placeholder="Nhập dự đoán..." style="min-width:240px" ${m.locked ? 'disabled' : ''} />
         <div class="small">Thưởng đúng: ${m.bonus_points} điểm</div>
       </td>
-      <td>${data.locked || m.result ? '<span class="small">Đã khóa</span>' : `<button onclick="saveSpecialPick('${m.key}')">Lưu dự đoán</button>`}</td>
+      <td>${m.locked ? '<span class="small">Đã khóa</span>' : `<button onclick="saveSpecialPick('${m.key}')">Lưu dự đoán</button>`}</td>
     </tr>
   `).join('');
   els.specialMarkets.innerHTML = `
-    <div class="small">${data.locked ? 'Dự đoán vui đã khóa.' : 'Có thể dự đoán đến hết'} Hạn chót: ${data.deadline_text}.</div>
+    <div class="small">${data.locked ? 'Dự đoán vui tổng đang khóa theo hạn chung.' : 'Dự đoán vui tổng đang mở theo hạn chung.'} Hạn chót: ${data.deadline_text}. Một số câu có thể được mở/khóa riêng bởi admin.</div>
     <table><thead><tr><th>Hạng mục</th><th>Kết quả chính thức</th><th>Dự đoán</th><th>${actionColLabel}</th></tr></thead><tbody>${formRows}</tbody></table>
   `;
 
@@ -644,12 +644,21 @@ async function renderAdminSpecials() {
         <td>${m.total_picks}</td>
         <td>${m.result || '-'}</td>
         <td>
+          <select id="special-lock-${m.key}">
+            <option value="default" ${m.lock_mode === 'default' ? 'selected' : ''}>Theo hạn chung</option>
+            <option value="open" ${m.lock_mode === 'open' ? 'selected' : ''}>Mở riêng</option>
+            <option value="locked" ${m.lock_mode === 'locked' ? 'selected' : ''}>Khóa riêng</option>
+          </select>
+          <button onclick="saveSpecialLockMode('${m.key}')">Lưu trạng thái</button>
+          <div class="small">Hiện tại: ${m.locked ? 'Đang khóa' : 'Đang mở'}</div>
+        </td>
+        <td>
           <input id="settle-${m.key}" placeholder="Kết quả chính thức..." style="min-width:220px" />
           <button onclick="settleSpecial('${m.key}')">Chốt hạng mục</button>
         </td>
       </tr>
     `).join('');
-    els.adminSpecials.innerHTML = `<table><thead><tr><th>Hạng mục</th><th>Số dự đoán</th><th>Kết quả</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminSpecials.innerHTML = `<table><thead><tr><th>Hạng mục</th><th>Số dự đoán</th><th>Kết quả</th><th>Mở/khóa riêng</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) {
     els.adminSpecialsStatus.textContent = '';
     els.adminSpecials.innerHTML = `<p class="small error">${e.message}</p>`;
@@ -1320,6 +1329,20 @@ window.settleSpecial = async function (marketKey) {
     });
     setMessage('Chốt dự đoán vui thành công', 'success');
     await Promise.all([refresh(), renderAdminSpecials()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.saveSpecialLockMode = async function (marketKey) {
+  try {
+    const lockMode = document.getElementById(`special-lock-${marketKey}`).value;
+    await adminApi(`/api/admin/specials/${marketKey}/lock-mode`, {
+      method: 'POST',
+      body: JSON.stringify({ lockMode })
+    });
+    setMessage('Đã cập nhật trạng thái mở/khóa của hạng mục', 'success');
+    await Promise.all([renderAdminSpecials(), renderSpecials()]);
   } catch (e) {
     setMessage(e.message, 'error');
   }
