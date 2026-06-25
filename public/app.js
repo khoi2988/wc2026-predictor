@@ -437,12 +437,6 @@ async function refresh() {
     if (user.is_admin) {
       adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderAdminSpecials());
     }
-    if (canManageOdds || canSetResult) {
-      adminRenderTasks.push(renderAdminMatches());
-    }
-    if (canExportUsers) {
-      adminRenderTasks.push(renderAdminUsers());
-    }
   } else {
     els.adminPanel.classList.add('hidden');
   }
