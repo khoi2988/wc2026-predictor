@@ -421,6 +421,7 @@ async function refresh() {
   els.main.classList.remove('hidden');
   const canOperate = user.is_admin || user.can_manage_odds || user.can_set_result || user.can_export_user_history;
   currentUser = user;
+  const adminRenderTasks = [];
   if (canOperate) {
     const canManageOdds = user.is_admin || user.can_manage_odds;
     const canSetResult = user.is_admin || user.can_set_result;
@@ -434,7 +435,13 @@ async function refresh() {
     document.getElementById('btnAdminLoad').classList.toggle('hidden', !(canManageOdds || canSetResult));
     document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !canExportUsers);
     if (user.is_admin) {
-      await Promise.all([renderDailyBonusConfig(), renderMaintenanceConfig()]);
+      adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderAdminSpecials());
+    }
+    if (canManageOdds || canSetResult) {
+      adminRenderTasks.push(renderAdminMatches());
+    }
+    if (canExportUsers) {
+      adminRenderTasks.push(renderAdminUsers());
     }
   } else {
     els.adminPanel.classList.add('hidden');
@@ -448,7 +455,7 @@ async function refresh() {
     els.fullNameLockCard.classList.add('hidden');
   }
 
-  await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials(), renderHealth()]);
+  await Promise.all([renderMatches(), renderLeaderboard(), renderMyBets(), renderSpecials(), renderHealth(), ...adminRenderTasks]);
 }
 window.refresh = refresh;
 
