@@ -139,6 +139,9 @@ for (const user of db.users) {
   if (typeof user.can_export_user_history !== 'boolean') {
     user.can_export_user_history = false;
   }
+  if (typeof user.is_disabled !== 'boolean') {
+    user.is_disabled = false;
+  }
   if (!Number.isInteger(user.daily_bonus_days_awarded)) {
     user.daily_bonus_days_awarded = 0;
   }
@@ -198,6 +201,7 @@ function ensureAdminUser() {
     existing.can_manage_odds = true;
     existing.can_set_result = true;
     existing.can_export_user_history = true;
+    existing.is_disabled = false;
     if (!existing.full_name || !String(existing.full_name).trim()) {
       existing.full_name = 'Quản trị viên';
     }
@@ -214,6 +218,7 @@ function ensureAdminUser() {
     can_manage_odds: true,
     can_set_result: true,
     can_export_user_history: true,
+    is_disabled: false,
     full_name: 'Quản trị viên',
     created_at: new Date().toISOString()
   });
@@ -247,6 +252,7 @@ async function loadDbRemoteIfEnabled() {
       if (typeof user.can_manage_odds !== 'boolean') user.can_manage_odds = false;
       if (typeof user.can_set_result !== 'boolean') user.can_set_result = false;
       if (typeof user.can_export_user_history !== 'boolean') user.can_export_user_history = false;
+      if (typeof user.is_disabled !== 'boolean') user.is_disabled = false;
       if (!Number.isInteger(user.daily_bonus_days_awarded)) user.daily_bonus_days_awarded = 0;
     }
     for (const match of db.matches) {
@@ -636,13 +642,19 @@ app.get('/api/health', (req, res) => {
 
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
+  const user = getSessionUserRecord(req);
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if (user.is_disabled && !user.is_admin) {
+    req.session.destroy(() => {});
+    return res.status(403).json({ error: 'Account disabled.' });
+  }
   next();
 }
 
 function requireAdmin(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: 'Unauthorized' });
   const user = db.users.find((u) => u.id === req.session.user.id);
-  if (!user || !user.is_admin) return res.status(403).json({ error: 'Forbidden' });
+  if (!user || user.is_disabled || !user.is_admin) return res.status(403).json({ error: 'Forbidden' });
   next();
 }
 
@@ -654,6 +666,7 @@ function getSessionUserRecord(req) {
 function hasPermission(req, permissionKey) {
   const user = getSessionUserRecord(req);
   if (!user) return false;
+  if (user.is_disabled) return false;
   if (user.is_admin) return true;
   return Boolean(user[permissionKey]);
 }
@@ -758,6 +771,7 @@ function sanitizeUser(user) {
     can_manage_odds: Boolean(user.can_manage_odds),
     can_set_result: Boolean(user.can_set_result),
     can_export_user_history: Boolean(user.can_export_user_history),
+    is_disabled: Boolean(user.is_disabled),
     created_at: user.created_at
   };
 }
@@ -780,6 +794,9 @@ function getMaintenanceState(user = null) {
 function currentUser(req) {
   applyDailyBonusToAllUsers();
   const user = getSessionUserRecord(req);
+  if (user?.is_disabled && !user.is_admin) {
+    return null;
+  }
   return user ? sanitizeUser(user) : null;
 }
 
@@ -832,6 +849,8 @@ app.post('/api/register', async (req, res) => {
     is_admin: false,
     can_manage_odds: false,
     can_set_result: false,
+    can_export_user_history: false,
+    is_disabled: false,
     created_at: new Date().toISOString()
   };
 
@@ -852,6 +871,9 @@ app.post('/api/login', async (req, res) => {
 
   const ok = await bcrypt.compare(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid credentials.' });
+  if (user.is_disabled && !user.is_admin) {
+    return res.status(403).json({ error: 'Account disabled.' });
+  }
 
   const maintenance = getMaintenanceState(user);
   if (maintenance.enabled && !maintenance.can_access) {
@@ -891,6 +913,13 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 
 app.get('/api/me', (req, res) => {
   const userRecord = getSessionUserRecord(req);
+  if (userRecord?.is_disabled && !userRecord.is_admin) {
+    req.session.destroy(() => {});
+    return res.json({
+      user: null,
+      maintenance: getMaintenanceState(null)
+    });
+  }
   const maintenance = getMaintenanceState(userRecord);
   res.json({
     user: maintenance.enabled && !maintenance.can_access ? null : currentUser(req),
@@ -906,6 +935,7 @@ app.get('/api/matches', (req, res) => {
 app.get('/api/leaderboard', (req, res) => {
   applyDailyBonusToAllUsers();
   const leaderboard = db.users
+    .filter((u) => !u.is_disabled)
     .map((u) => {
       const pointsOnBet = db.bets
         .filter((b) => b.user_id === u.id && b.status === 'open')
@@ -1005,7 +1035,8 @@ app.get('/api/admin/users', requirePermission('can_export_user_history'), (req, 
       is_admin: Boolean(u.is_admin),
       can_manage_odds: Boolean(u.can_manage_odds),
       can_set_result: Boolean(u.can_set_result),
-      can_export_user_history: Boolean(u.can_export_user_history)
+      can_export_user_history: Boolean(u.can_export_user_history),
+      is_disabled: Boolean(u.is_disabled)
     }))
     .sort((a, b) => a.username.localeCompare(b.username));
   res.json({ users });
@@ -1060,6 +1091,7 @@ app.post('/api/admin/users/:id/permissions', requireAdmin, (req, res) => {
   user.can_manage_odds = Boolean(req.body.canManageOdds);
   user.can_set_result = Boolean(req.body.canSetResult);
   user.can_export_user_history = Boolean(req.body.canExportUserHistory);
+  user.is_disabled = Boolean(req.body.isDisabled);
   saveDb();
   res.json({ ok: true, user: sanitizeUser(user) });
 });

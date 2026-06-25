@@ -16,6 +16,9 @@
       throw new Error(data.error || 'Yêu cầu đăng nhập lại.');
     }
     if (res.status === 403) {
+      if (data.error === 'Account disabled.') {
+        throw new Error('Tài khoản này đã bị vô hiệu hóa.');
+      }
       if (data.error === 'Forbidden') {
         throw new Error('Bạn không có quyền thao tác chức năng này.');
       }
@@ -568,6 +571,7 @@ async function renderAdminUsers() {
         <td>
           <button onclick="exportUserHistory(${u.id})">Export lịch sử</button>
           ${isAdmin ? `<button onclick="resetUserPassword(${u.id})">Reset password</button>` : ''}
+          ${u.is_disabled ? '<div class="small error">Đã disable / Ẩn BXH</div>' : ''}
         </td>
         ${isAdmin ? `
         <td>${u.points}</td>
@@ -576,6 +580,7 @@ async function renderAdminUsers() {
             <label><input type="checkbox" id="perm-odds-${u.id}" ${u.can_manage_odds ? 'checked' : ''} /> Set kèo</label><br>
             <label><input type="checkbox" id="perm-result-${u.id}" ${u.can_set_result ? 'checked' : ''} /> Set tỷ số/KQ</label><br>
             <label><input type="checkbox" id="perm-export-${u.id}" ${u.can_export_user_history ? 'checked' : ''} /> Export lịch sử user</label><br>
+            <label><input type="checkbox" id="perm-disabled-${u.id}" ${u.is_disabled ? 'checked' : ''} /> Disable nick + Ẩn khỏi BXH</label><br>
             <button onclick="savePermissions(${u.id})">Lưu quyền</button>
           `}
         </td>
@@ -1250,12 +1255,13 @@ window.savePermissions = async function (userId) {
     const canManageOdds = document.getElementById(`perm-odds-${userId}`)?.checked;
     const canSetResult = document.getElementById(`perm-result-${userId}`)?.checked;
     const canExportUserHistory = document.getElementById(`perm-export-${userId}`)?.checked;
+    const isDisabled = document.getElementById(`perm-disabled-${userId}`)?.checked;
     await adminApi(`/api/admin/users/${userId}/permissions`, {
       method: 'POST',
-      body: JSON.stringify({ canManageOdds, canSetResult, canExportUserHistory })
+      body: JSON.stringify({ canManageOdds, canSetResult, canExportUserHistory, isDisabled })
     });
     setMessage('Cập nhật quyền thành công', 'success');
-    await renderAdminUsers();
+    await Promise.all([refresh(), renderAdminUsers(), renderLeaderboard()]);
   } catch (e) {
     setMessage(e.message, 'error');
   }
