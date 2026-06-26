@@ -409,6 +409,23 @@ thead th {
   width: 100%;
 }
 
+.score-upload-tools {
+  display: grid;
+  gap: 8px;
+  min-width: 320px;
+  flex: 1 1 320px;
+}
+
+.score-upload-preview {
+  max-width: 320px;
+  max-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  object-fit: contain;
+  background: #fff;
+  padding: 6px;
+}
+
 .small { font-size: 12px; opacity: .9; }
 .error { color: #b91c1c; font-weight: 600; }
 .success { color: #166534; font-weight: 600; }
@@ -471,6 +488,12 @@ thead th {
   }
   .score-bet-panel {
     grid-template-columns: 1fr;
+  }
+  .score-upload-tools {
+    min-width: 0;
+  }
+  .score-upload-preview {
+    max-width: 100%;
   }
   .matches-table {
     table-layout: auto;

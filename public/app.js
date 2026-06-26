@@ -147,6 +147,7 @@ function syncNewMatchModeUI() {
   setVisible(document.getElementById('newOddsHandicapHome'), isHandicap);
   setVisible(document.getElementById('newOddsHandicapAway'), isHandicap);
   setVisible(document.getElementById('newScoreOdds'), isScore);
+  setVisible(document.getElementById('newScoreTools'), isScore);
 }
 
 function syncRowModeUI(matchId) {
@@ -260,6 +261,42 @@ function formatScoreOddsInput(scoreOdds) {
   return Object.entries(scoreOdds || {})
     .map(([score, odds]) => `${score}=${odds}`)
     .join(', ');
+}
+
+function extractScoreOddsFromOcrText(rawText) {
+  const normalized = String(rawText || '')
+    .replace(/[–—−]/g, '-')
+    .replace(/[:]/g, '-')
+    .replace(/[|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = normalized.split(' ').filter(Boolean);
+  const scoreTokens = [];
+  const oddTokens = [];
+
+  for (const token of tokens) {
+    const scoreMatch = token.match(/^(\d{1,2})-(\d{1,2})$/);
+    if (scoreMatch) {
+      scoreTokens.push(`${Number(scoreMatch[1])}-${Number(scoreMatch[2])}`);
+      continue;
+    }
+    const oddMatch = token.match(/^(\d+(?:\.\d+)?)$/);
+    if (oddMatch) {
+      const odds = Number(oddMatch[1]);
+      if (!Number.isNaN(odds) && odds > 1) {
+        oddTokens.push(String(odds));
+      }
+    }
+  }
+
+  const count = Math.min(scoreTokens.length, oddTokens.length);
+  if (!count) return '';
+
+  const pairs = [];
+  for (let i = 0; i < count; i += 1) {
+    pairs.push(`${scoreTokens[i]}=${oddTokens[i]}`);
+  }
+  return pairs.join(', ');
 }
 
 const TEAM_CATALOG = Array.isArray(window.__TEAM_CATALOG__) ? window.__TEAM_CATALOG__ : [];
@@ -1277,6 +1314,53 @@ document.getElementById('btnAddMatch').onclick = async () => {
     await Promise.all([refresh(), renderAdminMatches()]);
   } catch (e) {
     setMessage(e.message, 'error');
+  }
+};
+
+document.getElementById('scoreOddsImage').onchange = (e) => {
+  const file = e.target.files?.[0];
+  const preview = document.getElementById('scoreOddsPreview');
+  if (!file) {
+    preview.src = '';
+    preview.classList.add('hidden');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    preview.src = reader.result;
+    preview.classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+};
+
+document.getElementById('btnParseScoreImage').onclick = async () => {
+  try {
+    const betMode = document.getElementById('newBetMode').value;
+    if (betMode !== 'SCORE') {
+      setMessage('Vui lòng chọn thể thức tỷ số chính xác trước khi đọc ảnh.', 'error');
+      return;
+    }
+    const file = document.getElementById('scoreOddsImage').files?.[0];
+    if (!file) {
+      setMessage('Vui lòng chọn ảnh odds trước.', 'error');
+      return;
+    }
+    if (!window.Tesseract || typeof window.Tesseract.recognize !== 'function') {
+      setMessage('Không tải được OCR engine. Thử F5 lại trang rồi làm lại.', 'error');
+      return;
+    }
+
+    setMessage('Đang đọc ảnh odds, vui lòng chờ...', 'success');
+    const result = await window.Tesseract.recognize(file, 'eng');
+    const parsed = extractScoreOddsFromOcrText(result?.data?.text || '');
+    if (!parsed) {
+      setMessage('Không nhận diện được odds từ ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.', 'error');
+      return;
+    }
+    document.getElementById('newScoreOdds').value = parsed;
+    setMessage('Đã đọc ảnh và điền odds tỷ số. Vui lòng kiểm tra lại trước khi lưu.', 'success');
+  } catch (e) {
+    setMessage(`Đọc ảnh thất bại: ${e.message}`, 'error');
   }
 };
 
