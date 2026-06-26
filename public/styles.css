@@ -57,7 +57,17 @@ input, select, button {
   transition: all .2s ease;
 }
 
-input:focus, select:focus {
+textarea {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #ccbca8;
+  font-size: 14px;
+  transition: all .2s ease;
+  font-family: inherit;
+  resize: vertical;
+}
+
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: #7ca9a0;
   box-shadow: 0 0 0 3px rgba(11, 115, 83, 0.12);
@@ -343,6 +353,62 @@ thead th {
   min-width: 0;
 }
 
+.score-matches-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.score-match-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff8ee 100%);
+}
+
+.score-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.score-card-meta {
+  text-align: right;
+}
+
+.score-odds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.score-odds-chip {
+  border: 1px solid #decab3;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px 10px;
+  min-height: 66px;
+}
+
+.score-odds-chip strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.score-bet-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 110px 140px;
+  gap: 10px;
+  align-items: center;
+}
+
+.score-bet-panel .bet-action {
+  width: 100%;
+}
+
 .small { font-size: 12px; opacity: .9; }
 .error { color: #b91c1c; font-weight: 600; }
 .success { color: #166534; font-weight: 600; }
@@ -396,6 +462,15 @@ thead th {
   .bet-controls input {
     width: 100%;
     flex: 1 1 auto;
+  }
+  .score-card-head {
+    flex-direction: column;
+  }
+  .score-card-meta {
+    text-align: left;
+  }
+  .score-bet-panel {
+    grid-template-columns: 1fr;
   }
   .matches-table {
     table-layout: auto;

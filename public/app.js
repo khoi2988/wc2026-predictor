@@ -43,6 +43,7 @@ const els = {
   me: document.getElementById('me'),
   msg: document.getElementById('msg'),
   openMatches: document.getElementById('openMatches'),
+  scoreMatches: document.getElementById('scoreMatches'),
   closedMatches: document.getElementById('closedMatches'),
   leaderboard: document.getElementById('leaderboard'),
   myBets: document.getElementById('myBets'),
@@ -81,6 +82,7 @@ let activeTabId = 'openMatchesTab';
 let activeAdminMatchesTab = 'open';
 let maintenanceState = { enabled: false, can_access: true, message: '' };
 let selectedOpenMatchDay = 'ALL';
+let selectedScoreMatchDay = 'ALL';
 let selectedClosedMatchDay = 'ALL';
 
 function tr(key, params = {}, fallback = '') {
@@ -136,27 +138,36 @@ function syncNewMatchModeUI() {
   if (!modeEl) return;
   const mode = modeEl.value;
   const is1x2 = mode === '1X2';
+  const isHandicap = mode === 'HANDICAP';
+  const isScore = mode === 'SCORE';
   setVisible(document.getElementById('newOddsHome'), is1x2);
   setVisible(document.getElementById('newOddsDraw'), is1x2);
   setVisible(document.getElementById('newOddsAway'), is1x2);
-  setVisible(document.getElementById('newHandicapLine'), !is1x2);
-  setVisible(document.getElementById('newOddsHandicapHome'), !is1x2);
-  setVisible(document.getElementById('newOddsHandicapAway'), !is1x2);
+  setVisible(document.getElementById('newHandicapLine'), isHandicap);
+  setVisible(document.getElementById('newOddsHandicapHome'), isHandicap);
+  setVisible(document.getElementById('newOddsHandicapAway'), isHandicap);
+  setVisible(document.getElementById('newScoreOdds'), isScore);
 }
 
 function syncRowModeUI(matchId) {
   const modeEl = document.getElementById(`mode-${matchId}`);
   if (!modeEl) return;
   const is1x2 = modeEl.value === '1X2';
+  const isHandicap = modeEl.value === 'HANDICAP';
   const ids1x2 = [`odds-home-${matchId}`, `odds-draw-${matchId}`, `odds-away-${matchId}`];
   const idsHcp = [`hcp-line-${matchId}`, `hcp-home-${matchId}`, `hcp-away-${matchId}`];
+  const idsScore = [`score-odds-${matchId}`];
   for (const id of ids1x2) {
     const el = document.getElementById(id);
     if (el) el.disabled = !is1x2;
   }
   for (const id of idsHcp) {
     const el = document.getElementById(id);
-    if (el) el.disabled = is1x2;
+    if (el) el.disabled = !isHandicap;
+  }
+  for (const id of idsScore) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = modeEl.value !== 'SCORE';
   }
 }
 
@@ -236,6 +247,21 @@ function filterMatchesByDay(matches, selectedDay) {
   return matches.filter((m) => matchDayKey(m.kickoff_at) === selectedDay);
 }
 
+function scoreOddsSummary(scoreOdds) {
+  const entries = Object.entries(scoreOdds || {});
+  if (!entries.length) return '-';
+  return entries
+    .slice(0, 6)
+    .map(([score, odds]) => `${score}=${odds}`)
+    .join(', ') + (entries.length > 6 ? '...' : '');
+}
+
+function formatScoreOddsInput(scoreOdds) {
+  return Object.entries(scoreOdds || {})
+    .map(([score, odds]) => `${score}=${odds}`)
+    .join(', ');
+}
+
 const TEAM_CATALOG = Array.isArray(window.__TEAM_CATALOG__) ? window.__TEAM_CATALOG__ : [];
 
 function normalizeTeamKey(name) {
@@ -306,6 +332,7 @@ function betMatchResultText(bet) {
 
 function marketLabel(market, line) {
   if (market === 'HANDICAP') return tr('marketHandicap', { line: line ?? 0 }, `Kèo chấp (${line ?? 0})`);
+  if (market === 'SCORE') return tr('marketScore', {}, 'Tỷ số chính xác');
   return tr('market1x2', {}, '1X2');
 }
 
@@ -323,6 +350,7 @@ function betPickText(bet) {
     if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
     if (bet.pick === 'AWAY') return `${bet.team_b} +${bet.handicap_line ?? 0}`;
   }
+  if (bet.market === 'SCORE') return bet.pick;
   if (bet.pick === 'HOME') return tr('betPickWin', { team: bet.team_a }, `${bet.team_a} thắng`);
   if (bet.pick === 'DRAW') return tr('pickDraw', {}, 'Hòa');
   return tr('betPickWin', { team: bet.team_b }, `${bet.team_b} thắng`);
@@ -496,21 +524,23 @@ async function renderAdminMatches() {
           <select id="mode-${m.id}" ${canManageOdds ? '' : 'disabled'}>
             <option value="1X2" ${m.bet_mode === '1X2' ? 'selected' : ''}>1X2</option>
             <option value="HANDICAP" ${m.bet_mode === 'HANDICAP' ? 'selected' : ''}>Kèo chấp</option>
+            <option value="SCORE" ${m.bet_mode === 'SCORE' ? 'selected' : ''}>Tỷ số</option>
           </select>
         </td>
         <td>
-          <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_home}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_home : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="odds-draw-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_draw}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-draw-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_draw : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_away}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_away : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.handicap_line ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
-          <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_handicap_home ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
-          <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.odds_handicap_away ?? ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.bet_mode === 'HANDICAP' ? (m.handicap_line ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_home ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_away ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="score-odds-${m.id}" value="${m.bet_mode === 'SCORE' ? formatScoreOddsInput(m.score_odds) : ''}" placeholder="1-0=9.3, 2-0=8.9" style="width:220px" ${canManageOdds ? '' : 'disabled'} />
         </td>
         <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
         <td>
@@ -542,7 +572,7 @@ async function renderAdminMatches() {
       </tr>
     `).join('');
     els.adminMatchesActive.innerHTML = activeMatches.length
-      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${activeRows}</tbody></table>`
+      ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>1</th><th>X</th><th>2</th><th>Kèo chấp / Tỷ số</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${activeRows}</tbody></table>`
       : `<p class="small">Hiện không còn trận nào chờ set kèo/kết quả.</p>`;
     els.adminMatchesHistory.innerHTML = settledMatches.length
       ? `<table><thead><tr><th>ID</th><th>A</th><th>B</th><th>Giờ đá</th><th>Thể thức</th><th>KQ</th><th>Hành động</th></tr></thead><tbody>${settledRows}</tbody></table>`
@@ -696,7 +726,45 @@ async function renderMatches() {
       .filter((b) => b.status === 'open')
       .map((b) => b.match_id)
   );
+  const buildScoreCard = (m) => {
+    const isAdmin = Boolean(currentUser?.is_admin);
+    const hasMyBet = myOpenMatchIds.has(m.id);
+    const openStatus = hasMyBet
+      ? tr('matchAlreadyBet', {}, 'Đã đặt cược')
+      : tr('matchNotYetBet', {}, 'Chưa đặt cược');
+    const scoreEntries = Object.entries(m.score_odds || {});
+    return `
+      <div class="score-match-card">
+        <div class="score-card-head">
+          <div>
+            <div class="match-title">${matchLabel(m.team_a, m.team_b)}</div>
+            <div class="small match-kickoff">${fmtTime(m.kickoff_at)}</div>
+          </div>
+          <div class="score-card-meta">
+            <span class="status-pill ${isAdmin ? 'status-closed' : (hasMyBet ? 'status-closed' : 'status-open')}">${isAdmin ? 'Admin có thể đặt mọi lúc' : openStatus}</span>
+            <div class="small match-substatus">${m.result ? `KQ: ${matchResultText(m)}` : tr('resultPending', {}, 'Chưa có kết quả')}</div>
+          </div>
+        </div>
+        <div class="score-odds-grid">
+          ${scoreEntries.map(([score, odds]) => `
+            <div class="score-odds-chip">
+              <strong>${score}</strong>
+              <span class="small">Odds: ${odds}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="score-bet-panel">
+          <select id="score-pick-${m.id}">
+            ${scoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+          </select>
+          <input id="score-stake-${m.id}" type="number" min="1" value="100" />
+          <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')">${tr('betAction', {}, 'Đặt')}</button>
+        </div>
+      </div>
+    `;
+  };
   const buildRow = (m, closed) => {
+    const isAdmin = Boolean(currentUser?.is_admin);
     const resultText = m.result ? matchResultText(m) : tr('resultPending', {}, 'Chưa có kết quả');
     const result = m.result
       ? tr('resultLabel', { result: resultText }, `KQ: ${resultText}`)
@@ -715,6 +783,10 @@ async function renderMatches() {
     const odds2Cell = mode === '1X2'
       ? `<div class="odds-block"><div>${tr('odds2Text', { team: teamLabel(m.team_b) }, `Kèo 2: ${teamLabel(m.team_b)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_away }, `Tỷ lệ: ${m.odds_away}`)}</span></div>`
       : '<span class="small">-</span>';
+    const scoreEntries = Object.entries(m.score_odds || {});
+    const scoreCell = mode === 'SCORE'
+      ? `<div class="odds-block"><div>Tỷ số mở cược</div><span class="small">${scoreOddsSummary(m.score_odds)}</span></div>`
+      : '';
 
     return `
       <tr>
@@ -724,14 +796,14 @@ async function renderMatches() {
         </td>
         <td>${odds1Cell}</td>
         <td>${oddsXCell}</td>
-        <td>${odds2Cell}</td>
+        <td>${mode === 'SCORE' ? scoreCell : odds2Cell}</td>
         <td>
           ${closed
-            ? `<span class="status-pill status-closed">${result}</span>`
+            ? `<span class="status-pill status-closed">${result}</span>${isAdmin ? `<div class="small match-substatus">Admin vẫn có thể đặt cược</div>` : ''}`
             : `<span class="status-pill ${hasMyBet ? 'status-closed' : 'status-open'}">${openStatus}</span><div class="small match-substatus">${tr('resultPending', {}, 'Chưa có kết quả')}</div>`}
         </td>
         <td>
-          ${closed ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
+          ${closed && !isAdmin ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
             ${mode === 'HANDICAP' ? `
               <div class="bet-box">
                 <div class="small bet-mode">${tr('betModeLabelHandicap', {}, 'Thể thức: Kèo chấp')}</div>
@@ -745,6 +817,20 @@ async function renderMatches() {
                 </div>
                 <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">${tr('betAction', {}, 'Đặt')}</button>
               </div>
+            ` : mode === 'SCORE' ? `
+              ${closed && isAdmin ? `
+                <div class="bet-box">
+                  <div class="small bet-mode">Admin đặt tỷ số chính xác</div>
+                  <div class="small bet-meta">${scoreEntries.length} tỷ số đang mở</div>
+                  <div class="bet-controls">
+                    <select id="score-pick-${m.id}">
+                      ${scoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+                    </select>
+                    <input id="score-stake-${m.id}" type="number" min="1" value="100" />
+                  </div>
+                  <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')">${tr('betAction', {}, 'Đặt')}</button>
+                </div>
+              ` : `<div class="bet-box closed"><span class="small">Qua tab Tỷ số chính xác để đặt cược.</span></div>`}
             ` : `
               <div class="bet-box">
                 <div class="small bet-mode">${tr('betModeLabel1x2', {}, 'Thể thức: 1X2')}</div>
@@ -766,22 +852,31 @@ async function renderMatches() {
   };
 
   const openMatches = data.matches
-    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result);
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && String(m.bet_mode || '1X2') !== 'SCORE');
+  const scoreMatches = data.matches
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && String(m.bet_mode || '1X2') === 'SCORE');
   const closedMatches = data.matches
     .filter((m) => Date.now() >= new Date(m.kickoff_at).getTime() || m.result);
 
   if (selectedOpenMatchDay !== 'ALL' && !openMatches.some((m) => matchDayKey(m.kickoff_at) === selectedOpenMatchDay)) {
     selectedOpenMatchDay = 'ALL';
   }
+  if (selectedScoreMatchDay !== 'ALL' && !scoreMatches.some((m) => matchDayKey(m.kickoff_at) === selectedScoreMatchDay)) {
+    selectedScoreMatchDay = 'ALL';
+  }
   if (selectedClosedMatchDay !== 'ALL' && !closedMatches.some((m) => matchDayKey(m.kickoff_at) === selectedClosedMatchDay)) {
     selectedClosedMatchDay = 'ALL';
   }
 
   const filteredOpenMatches = filterMatchesByDay(openMatches, selectedOpenMatchDay);
+  const filteredScoreMatches = filterMatchesByDay(scoreMatches, selectedScoreMatchDay);
   const filteredClosedMatches = filterMatchesByDay(closedMatches, selectedClosedMatchDay);
 
   const openRows = filteredOpenMatches
     .map((m) => buildRow(m, false))
+    .join('');
+  const scoreRows = filteredScoreMatches
+    .map((m) => buildScoreCard(m))
     .join('');
   const closedRows = filteredClosedMatches
     .map((m) => buildRow(m, true))
@@ -795,6 +890,11 @@ async function renderMatches() {
     </table>
   `;
 
+  els.scoreMatches.innerHTML = `
+    ${renderMatchDayTabs(scoreMatches, selectedScoreMatchDay, 'setScoreMatchDay')}
+    <div class="score-matches-grid">${scoreRows || `<p class="small">Hiện chưa có trận nào mở cược tỷ số chính xác.</p>`}</div>
+  `;
+
   els.closedMatches.innerHTML = `
     ${renderMatchDayTabs(closedMatches, selectedClosedMatchDay, 'setClosedMatchDay')}
     <table class="matches-table">
@@ -806,6 +906,11 @@ async function renderMatches() {
 
 window.setOpenMatchDay = function (day) {
   selectedOpenMatchDay = day;
+  renderMatches().catch((e) => setMessage(e.message, 'error'));
+};
+
+window.setScoreMatchDay = function (day) {
+  selectedScoreMatchDay = day;
   renderMatches().catch((e) => setMessage(e.message, 'error'));
 };
 
@@ -865,13 +970,19 @@ window.placeBet = async function (matchId, market = '1X2') {
     }
     const pick = market === 'HANDICAP'
       ? document.getElementById(`hcp-pick-${matchId}`).value
-      : document.getElementById(`pick-${matchId}`).value;
+      : market === 'SCORE'
+        ? document.getElementById(`score-pick-${matchId}`).value
+        : document.getElementById(`pick-${matchId}`).value;
     const stake = Number(market === 'HANDICAP'
       ? document.getElementById(`hcp-stake-${matchId}`).value
-      : document.getElementById(`stake-${matchId}`).value);
+      : market === 'SCORE'
+        ? document.getElementById(`score-stake-${matchId}`).value
+        : document.getElementById(`stake-${matchId}`).value);
     const odds = market === 'HANDICAP'
       ? (pick === 'HOME' ? match.odds_handicap_home : match.odds_handicap_away)
-      : (pick === 'HOME' ? match.odds_home : (pick === 'DRAW' ? match.odds_draw : match.odds_away));
+      : market === 'SCORE'
+        ? Number((match.score_odds || {})[pick])
+        : (pick === 'HOME' ? match.odds_home : (pick === 'DRAW' ? match.odds_draw : match.odds_away));
     const pickText = betPickText({
       market,
       pick,
@@ -1130,6 +1241,7 @@ document.getElementById('btnAddMatch').onclick = async () => {
     const handicapLineRaw = document.getElementById('newHandicapLine').value;
     const oddsHandicapHomeRaw = document.getElementById('newOddsHandicapHome').value;
     const oddsHandicapAwayRaw = document.getElementById('newOddsHandicapAway').value;
+    const scoreOdds = document.getElementById('newScoreOdds').value.trim();
     const kickoffAt = new Date(kickoffLocal).toISOString();
     const handicapLine = handicapLineRaw === '' ? null : Number(handicapLineRaw);
     const oddsHandicapHome = oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw);
@@ -1145,6 +1257,10 @@ document.getElementById('btnAddMatch').onclick = async () => {
         return;
       }
     }
+    if (betMode === 'SCORE' && !scoreOdds) {
+      setMessage('Vui lòng nhập odds tỷ số. Ví dụ: 1-0=9.3, 2-0=8.9', 'error');
+      return;
+    }
 
     await adminApi('/api/admin/matches', {
       method: 'POST',
@@ -1153,7 +1269,8 @@ document.getElementById('btnAddMatch').onclick = async () => {
         betMode,
         handicapLine,
         oddsHandicapHome,
-        oddsHandicapAway
+        oddsHandicapAway,
+        scoreOdds
       })
     });
     setMessage('Thêm trận thành công', 'success');
@@ -1213,6 +1330,7 @@ window.updateOdds = async function (matchId) {
     const handicapLineRaw = document.getElementById(`hcp-line-${matchId}`).value;
     const oddsHandicapHomeRaw = document.getElementById(`hcp-home-${matchId}`).value;
     const oddsHandicapAwayRaw = document.getElementById(`hcp-away-${matchId}`).value;
+    const scoreOdds = document.getElementById(`score-odds-${matchId}`).value.trim();
     await adminApi(`/api/admin/matches/${matchId}/odds`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -1220,7 +1338,8 @@ window.updateOdds = async function (matchId) {
         betMode,
         handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
         oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
-        oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw)
+        oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw),
+        scoreOdds
       })
     });
     setMessage('Cập nhật kèo thành công', 'success');

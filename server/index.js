@@ -124,6 +124,44 @@ function canonicalTeamName(name) {
   return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
 }
 
+function normalizeScoreOddsMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const result = {};
+  for (const [score, rawOdds] of Object.entries(value)) {
+    const match = String(score).trim().match(/^(\d+)\s*-\s*(\d+)$/);
+    const odds = Number(rawOdds);
+    if (!match || Number.isNaN(odds) || odds <= 1) continue;
+    result[`${Number(match[1])}-${Number(match[2])}`] = odds;
+  }
+  return result;
+}
+
+function parseScoreOddsInput(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return normalizeScoreOddsMap(raw);
+  }
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  const result = {};
+  const parts = text
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  for (const part of parts) {
+    const match = part.match(/^(\d+)\s*-\s*(\d+)\s*[:=]\s*(\d+(?:\.\d+)?)$/);
+    if (!match) {
+      throw new Error(`Invalid exact score entry: ${part}`);
+    }
+    const scoreKey = `${Number(match[1])}-${Number(match[2])}`;
+    const odds = Number(match[3]);
+    if (Number.isNaN(odds) || odds <= 1) {
+      throw new Error(`Invalid exact score odds: ${part}`);
+    }
+    result[scoreKey] = odds;
+  }
+  return result;
+}
+
 let db = loadDb();
 
 for (const user of db.users) {
@@ -154,12 +192,13 @@ for (const match of db.matches) {
   match.team_b = canonicalTeamName(match.team_b);
   if (!Number.isInteger(match.home_score)) match.home_score = null;
   if (!Number.isInteger(match.away_score)) match.away_score = null;
-  if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
+  if (!['1X2', 'HANDICAP', 'SCORE'].includes(match.bet_mode)) {
     match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
   }
   if (typeof match.handicap_line !== 'number') match.handicap_line = null;
   if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
   if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
+  match.score_odds = normalizeScoreOddsMap(match.score_odds);
 }
 if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) {
   db.specialMarkets = defaultDb().specialMarkets;
@@ -263,12 +302,13 @@ async function loadDbRemoteIfEnabled() {
       match.team_b = canonicalTeamName(match.team_b);
       if (!Number.isInteger(match.home_score)) match.home_score = null;
       if (!Number.isInteger(match.away_score)) match.away_score = null;
-      if (!['1X2', 'HANDICAP'].includes(match.bet_mode)) {
+      if (!['1X2', 'HANDICAP', 'SCORE'].includes(match.bet_mode)) {
         match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
       }
       if (typeof match.handicap_line !== 'number') match.handicap_line = null;
       if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
       if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
+      match.score_odds = normalizeScoreOddsMap(match.score_odds);
     }
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
@@ -767,6 +807,17 @@ function calculateBetSettlement(match, bet) {
       stake: bet.stake,
       odds: bet.odds
     });
+  }
+
+  if (market === 'SCORE') {
+    if (!Number.isInteger(match.home_score) || !Number.isInteger(match.away_score)) {
+      return null;
+    }
+    const actualScore = `${match.home_score}-${match.away_score}`;
+    if (bet.pick === actualScore) {
+      return { status: 'won', payout: Math.floor(bet.stake * bet.odds) };
+    }
+    return { status: 'lost', payout: 0 };
   }
 
   if (bet.pick === match.result) {
@@ -1464,11 +1515,17 @@ app.post('/api/bets', requireAuth, (req, res) => {
   const pick = String(req.body.pick || '');
   const stake = Number(req.body.stake);
   const market = String(req.body.market || '1X2').toUpperCase();
+  const user = db.users.find((u) => u.id === req.session.user.id);
+  const isAdmin = Boolean(user?.is_admin);
 
-  if (!Number.isInteger(matchId) || !['1X2', 'HANDICAP'].includes(market)) {
+  if (!Number.isInteger(matchId) || !['1X2', 'HANDICAP', 'SCORE'].includes(market)) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
   }
-  if ((market === '1X2' && !['HOME', 'DRAW', 'AWAY'].includes(pick)) || (market === 'HANDICAP' && !['HOME', 'AWAY'].includes(pick))) {
+  if (
+    (market === '1X2' && !['HOME', 'DRAW', 'AWAY'].includes(pick)) ||
+    (market === 'HANDICAP' && !['HOME', 'AWAY'].includes(pick)) ||
+    (market === 'SCORE' && !/^\d+\-\d+$/.test(pick))
+  ) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
   }
   if (!Number.isInteger(stake) || stake <= 0) {
@@ -1480,15 +1537,14 @@ app.post('/api/bets', requireAuth, (req, res) => {
   if (market !== String(match.bet_mode || '1X2')) {
     return res.status(400).json({ error: 'Trận này chỉ cho phép một thể thức cược đã cấu hình.' });
   }
-  if (match.result) return res.status(400).json({ error: 'Betting closed for this match.' });
-  if (Date.now() >= new Date(match.kickoff_at).getTime()) {
+  if (!isAdmin && match.result) return res.status(400).json({ error: 'Betting closed for this match.' });
+  if (!isAdmin && Date.now() >= new Date(match.kickoff_at).getTime()) {
     return res.status(400).json({ error: 'Betting closed (kickoff passed).' });
   }
 
   const existed = db.bets.some((b) => b.user_id === req.session.user.id && b.match_id === matchId);
   if (existed) return res.status(409).json({ error: 'You already bet on this match.' });
 
-  const user = db.users.find((u) => u.id === req.session.user.id);
   if (!user || user.points < stake) return res.status(400).json({ error: 'Not enough points.' });
 
   let odds = match.odds_draw;
@@ -1496,12 +1552,21 @@ app.post('/api/bets', requireAuth, (req, res) => {
   if (market === '1X2') {
     if (pick === 'HOME') odds = match.odds_home;
     if (pick === 'AWAY') odds = match.odds_away;
-  } else {
+  } else if (market === 'HANDICAP') {
     if (typeof match.handicap_line !== 'number' || typeof match.odds_handicap_home !== 'number' || typeof match.odds_handicap_away !== 'number') {
       return res.status(400).json({ error: 'Trận này chưa cấu hình kèo chấp.' });
     }
     handicapLine = match.handicap_line;
     odds = pick === 'HOME' ? match.odds_handicap_home : match.odds_handicap_away;
+  } else {
+    const scoreOdds = normalizeScoreOddsMap(match.score_odds);
+    if (!Object.keys(scoreOdds).length) {
+      return res.status(400).json({ error: 'Trận này chưa cấu hình kèo tỷ số.' });
+    }
+    if (typeof scoreOdds[pick] !== 'number') {
+      return res.status(400).json({ error: 'Tỷ số này chưa được mở cược.' });
+    }
+    odds = scoreOdds[pick];
   }
 
   user.points -= stake;
@@ -1521,6 +1586,17 @@ app.post('/api/bets', requireAuth, (req, res) => {
     payout: null,
     created_at: new Date().toISOString()
   });
+
+  const newBet = db.bets[db.bets.length - 1];
+  if (isAdmin && match.result) {
+    const settled = calculateBetSettlement(match, newBet);
+    if (!settled) {
+      return res.status(400).json({ error: 'Trận đã chốt nhưng thiếu tỷ số để tính payout ngay.' });
+    }
+    if (settled.payout > 0) user.points += settled.payout;
+    newBet.status = settled.status;
+    newBet.payout = settled.payout;
+  }
 
   saveDb();
   res.json({ ok: true, user: sanitizeUser(user) });
@@ -1578,9 +1654,10 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
   const oddsHandicapAwayRaw = req.body.oddsHandicapAway;
   const oddsHandicapHome = oddsHandicapHomeRaw === undefined || oddsHandicapHomeRaw === null || oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw);
   const oddsHandicapAway = oddsHandicapAwayRaw === undefined || oddsHandicapAwayRaw === null || oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw);
+  let scoreOdds = {};
 
   if (!teamA || !teamB || !kickoffAt) return res.status(400).json({ error: 'Missing team or kickoff.' });
-  if (!['1X2', 'HANDICAP'].includes(betMode)) {
+  if (!['1X2', 'HANDICAP', 'SCORE'].includes(betMode)) {
     return res.status(400).json({ error: 'Invalid bet mode.' });
   }
   if (betMode === '1X2' && [oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
@@ -1591,6 +1668,16 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
     if (oddsHandicapHome === null || oddsHandicapAway === null) return res.status(400).json({ error: 'Missing handicap odds.' });
     if ([oddsHandicapHome, oddsHandicapAway].some((x) => Number.isNaN(x) || x <= 1)) {
       return res.status(400).json({ error: 'Invalid handicap odds.' });
+    }
+  }
+  if (betMode === 'SCORE') {
+    try {
+      scoreOdds = parseScoreOddsInput(req.body.scoreOdds);
+    } catch (err) {
+      return res.status(400).json({ error: 'Định dạng odds tỷ số không hợp lệ. Dùng kiểu 1-0=9.3, 2-0=8.9' });
+    }
+    if (!Object.keys(scoreOdds).length) {
+      return res.status(400).json({ error: 'Thiếu cấu hình odds tỷ số.' });
     }
   }
 
@@ -1609,6 +1696,7 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
     handicap_line: betMode === 'HANDICAP' ? handicapLine : null,
     odds_handicap_home: betMode === 'HANDICAP' ? oddsHandicapHome : null,
     odds_handicap_away: betMode === 'HANDICAP' ? oddsHandicapAway : null,
+    score_odds: betMode === 'SCORE' ? scoreOdds : {},
     home_score: null,
     away_score: null,
     result: null,
@@ -1738,7 +1826,7 @@ app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) =>
   const matchBets = db.bets.filter((b) => b.match_id === matchId);
   for (const bet of matchBets) {
     const settled = calculateBetSettlement(match, bet);
-    if (!settled) return res.status(400).json({ error: 'Cần nhập tỷ số để chốt kèo chấp.' });
+    if (!settled) return res.status(400).json({ error: 'Cần nhập tỷ số đầy đủ để chốt kèo chấp hoặc kèo tỷ số.' });
     const user = db.users.find((u) => u.id === bet.user_id);
     if (user && settled.payout > 0) user.points += settled.payout;
     bet.status = settled.status;
@@ -1764,7 +1852,7 @@ app.post('/api/admin/recalculate-match/:id', requireAdmin, (req, res) => {
   for (const bet of bets) {
     const settled = calculateBetSettlement(match, bet);
     if (!settled) {
-      return res.status(400).json({ error: 'Kèo chấp cần tỷ số đầy đủ để tính lại.' });
+      return res.status(400).json({ error: 'Kèo chấp hoặc kèo tỷ số cần tỷ số đầy đủ để tính lại.' });
     }
     const oldPayout = Number.isInteger(bet.payout) ? bet.payout : 0;
     const delta = settled.payout - oldPayout;
@@ -1792,7 +1880,7 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
   const oddsDraw = Number(req.body.oddsDraw);
   const oddsAway = Number(req.body.oddsAway);
   const betMode = String(req.body.betMode || match.bet_mode || '1X2').toUpperCase();
-  if (!['1X2', 'HANDICAP'].includes(betMode)) return res.status(400).json({ error: 'Invalid bet mode.' });
+  if (!['1X2', 'HANDICAP', 'SCORE'].includes(betMode)) return res.status(400).json({ error: 'Invalid bet mode.' });
 
   if (betMode === '1X2') {
     if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
@@ -1805,7 +1893,8 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
     match.handicap_line = null;
     match.odds_handicap_home = null;
     match.odds_handicap_away = null;
-  } else {
+    match.score_odds = {};
+  } else if (betMode === 'HANDICAP') {
     const handicapLine = req.body.handicapLine === undefined || req.body.handicapLine === null || req.body.handicapLine === ''
       ? null
       : Number(req.body.handicapLine);
@@ -1819,6 +1908,22 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
     match.handicap_line = handicapLine;
     match.odds_handicap_home = oddsHandicapHome;
     match.odds_handicap_away = oddsHandicapAway;
+    match.score_odds = {};
+  } else {
+    let scoreOdds = {};
+    try {
+      scoreOdds = parseScoreOddsInput(req.body.scoreOdds);
+    } catch (err) {
+      return res.status(400).json({ error: 'Định dạng odds tỷ số không hợp lệ. Dùng kiểu 1-0=9.3, 2-0=8.9' });
+    }
+    if (!Object.keys(scoreOdds).length) {
+      return res.status(400).json({ error: 'Thiếu cấu hình odds tỷ số.' });
+    }
+    match.bet_mode = 'SCORE';
+    match.handicap_line = null;
+    match.odds_handicap_home = null;
+    match.odds_handicap_away = null;
+    match.score_odds = scoreOdds;
   }
   saveDb();
   res.json({ ok: true });
