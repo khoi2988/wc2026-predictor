@@ -82,6 +82,11 @@ button {
 }
 button:hover { filter: brightness(1.04); transform: translateY(-1px); }
 button.alt { background: linear-gradient(135deg, #128564, #0c6f53); }
+button.ghost {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
 
 .row {
   display: flex;
@@ -416,14 +421,59 @@ thead th {
   flex: 1 1 320px;
 }
 
+.score-upload-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .score-upload-preview {
   max-width: 320px;
-  max-height: 180px;
+  max-height: 220px;
   border: 1px solid var(--line);
   border-radius: 12px;
   object-fit: contain;
   background: #fff;
   padding: 6px;
+}
+
+.score-upload-preview.processed {
+  background:
+    linear-gradient(135deg, rgba(18, 133, 100, 0.06), rgba(208, 87, 0, 0.08)),
+    #fff;
+}
+
+.score-parsed-preview {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 12px;
+}
+
+.score-parsed-preview strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.score-parsed-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.score-parsed-preview th,
+.score-parsed-preview td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.score-parsed-preview tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.score-parsed-preview .small {
+  margin-top: 8px;
 }
 
 .small { font-size: 12px; opacity: .9; }
@@ -491,6 +541,12 @@ thead th {
   }
   .score-upload-tools {
     min-width: 0;
+  }
+  .score-upload-actions {
+    width: 100%;
+  }
+  .score-upload-actions button {
+    flex: 1 1 140px;
   }
   .score-upload-preview {
     max-width: 100%;

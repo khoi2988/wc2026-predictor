@@ -85,6 +85,15 @@ let selectedOpenMatchDay = 'ALL';
 let selectedScoreMatchDay = 'ALL';
 let selectedClosedMatchDay = 'ALL';
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function tr(key, params = {}, fallback = '') {
   const api = window.__i18n;
   if (api && typeof api.t === 'function') {
@@ -263,8 +272,61 @@ function formatScoreOddsInput(scoreOdds) {
     .join(', ');
 }
 
-function extractScoreOddsFromOcrText(rawText) {
-  const normalized = String(rawText || '')
+function normalizeOcrScoreToken(token) {
+  const normalized = String(token || '')
+    .replace(/[OoD]/g, '0')
+    .replace(/[Il|]/g, '1')
+    .replace(/[–—−:]/g, '-')
+    .replace(/\s+/g, '');
+  const match = normalized.match(/^(\d{1,2})-(\d{1,2})$/);
+  if (!match) return '';
+  return `${Number(match[1])}-${Number(match[2])}`;
+}
+
+function extractScoreOddsPairsFromOcr(rawText) {
+  const raw = String(rawText || '');
+  if (!raw.trim()) return [];
+
+  const lines = raw
+    .replace(/[|]/g, ' ')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const pairs = [];
+  const seen = new Set();
+  const scorePattern = /([0-9OIlD]{1,2}\s*[-:]\s*[0-9OIlD]{1,2})/g;
+
+  const pushPair = (score, oddsText) => {
+    const normalizedScore = normalizeOcrScoreToken(score);
+    const odds = Number(String(oddsText || '').replace(/,/g, '.'));
+    if (!normalizedScore || Number.isNaN(odds) || odds <= 1) return;
+    if (seen.has(normalizedScore)) return;
+    seen.add(normalizedScore);
+    pairs.push({ score: normalizedScore, odds: String(odds) });
+  };
+
+  for (const line of lines) {
+    const scoreMatches = [...line.matchAll(scorePattern)].map((match) => match[0]);
+    if (!scoreMatches.length) continue;
+
+    let strippedLine = line;
+    for (const scoreText of scoreMatches) {
+      strippedLine = strippedLine.replace(scoreText, ' ');
+    }
+
+    const oddsMatches = [...strippedLine.matchAll(/\d+(?:[.,]\d+)?/g)]
+      .map((match) => match[0])
+      .filter((token) => Number(String(token).replace(/,/g, '.')) > 1);
+
+    if (scoreMatches.length === oddsMatches.length) {
+      scoreMatches.forEach((score, index) => pushPair(score, oddsMatches[index]));
+    }
+  }
+
+  if (pairs.length) return pairs;
+
+  const normalized = raw
     .replace(/[–—−]/g, '-')
     .replace(/[:]/g, '-')
     .replace(/[|]/g, ' ')
@@ -275,14 +337,14 @@ function extractScoreOddsFromOcrText(rawText) {
   const oddTokens = [];
 
   for (const token of tokens) {
-    const scoreMatch = token.match(/^(\d{1,2})-(\d{1,2})$/);
-    if (scoreMatch) {
-      scoreTokens.push(`${Number(scoreMatch[1])}-${Number(scoreMatch[2])}`);
+    const normalizedScore = normalizeOcrScoreToken(token);
+    if (normalizedScore) {
+      scoreTokens.push(normalizedScore);
       continue;
     }
-    const oddMatch = token.match(/^(\d+(?:\.\d+)?)$/);
+    const oddMatch = token.match(/^(\d+(?:[.,]\d+)?)$/);
     if (oddMatch) {
-      const odds = Number(oddMatch[1]);
+      const odds = Number(oddMatch[1].replace(/,/g, '.'));
       if (!Number.isNaN(odds) && odds > 1) {
         oddTokens.push(String(odds));
       }
@@ -290,13 +352,184 @@ function extractScoreOddsFromOcrText(rawText) {
   }
 
   const count = Math.min(scoreTokens.length, oddTokens.length);
-  if (!count) return '';
-
-  const pairs = [];
   for (let i = 0; i < count; i += 1) {
-    pairs.push(`${scoreTokens[i]}=${oddTokens[i]}`);
+    pushPair(scoreTokens[i], oddTokens[i]);
   }
-  return pairs.join(', ');
+
+  return pairs;
+}
+
+function extractScoreOddsFromOcrText(rawText) {
+  return extractScoreOddsPairsFromOcr(rawText)
+    .map(({ score, odds }) => `${score}=${odds}`)
+    .join(', ');
+}
+
+function renderScoreOddsParsedPreview(pairs) {
+  const preview = document.getElementById('scoreOddsParsedPreview');
+  if (!preview) return;
+  if (!Array.isArray(pairs) || !pairs.length) {
+    preview.innerHTML = '';
+    preview.classList.add('hidden');
+    return;
+  }
+  preview.innerHTML = `
+    <strong>Preview odds nhận từ ảnh</strong>
+    <table>
+      <thead>
+        <tr>
+          <th>Tỷ số</th>
+          <th>Odds</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pairs.map((item) => `<tr><td>${escapeHtml(item.score)}</td><td>${escapeHtml(item.odds)}</td></tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="small">Hãy kiểm tra nhanh lại trước khi bấm thêm trận hoặc lưu kèo.</div>
+  `;
+  preview.classList.remove('hidden');
+}
+
+function setScoreOddsPreview(src, processed = false) {
+  const preview = document.getElementById('scoreOddsPreview');
+  if (!preview) return;
+  if (!src) {
+    preview.src = '';
+    preview.classList.add('hidden');
+    preview.classList.remove('processed');
+    return;
+  }
+  preview.src = src;
+  preview.classList.remove('hidden');
+  preview.classList.toggle('processed', processed);
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Không đọc được file ảnh.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Không mở được ảnh để OCR.'));
+    image.src = src;
+  });
+}
+
+async function preprocessScoreOddsImage(file) {
+  const dataUrl = await fileToDataUrl(file);
+  const image = await loadImageElement(dataUrl);
+
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = image.naturalWidth || image.width;
+  sourceCanvas.height = image.naturalHeight || image.height;
+  const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  sourceCtx.drawImage(image, 0, 0);
+
+  const sourceImage = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  const { data, width, height } = sourceImage;
+
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  let found = false;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const avg = (r + g + b) / 3;
+      const contrast = Math.max(r, g, b) - Math.min(r, g, b);
+      if (avg < 244 || contrast > 14) {
+        found = true;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (!found) {
+    minX = 0;
+    minY = 0;
+    maxX = width - 1;
+    maxY = height - 1;
+  }
+
+  const padding = 16;
+  minX = Math.max(0, minX - padding);
+  minY = Math.max(0, minY - padding);
+  maxX = Math.min(width - 1, maxX + padding);
+  maxY = Math.min(height - 1, maxY + padding);
+
+  const cropWidth = Math.max(1, maxX - minX + 1);
+  const cropHeight = Math.max(1, maxY - minY + 1);
+  const scale = Math.max(1.8, Math.min(3, 1800 / cropWidth));
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = Math.round(cropWidth * scale);
+  outputCanvas.height = Math.round(cropHeight * scale);
+  const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
+  outputCtx.imageSmoothingEnabled = true;
+  outputCtx.imageSmoothingQuality = 'high';
+  outputCtx.drawImage(
+    sourceCanvas,
+    minX,
+    minY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    outputCanvas.width,
+    outputCanvas.height
+  );
+
+  const processedImage = outputCtx.getImageData(0, 0, outputCanvas.width, outputCanvas.height);
+  const processedData = processedImage.data;
+  for (let i = 0; i < processedData.length; i += 4) {
+    const gray = Math.round(processedData[i] * 0.299 + processedData[i + 1] * 0.587 + processedData[i + 2] * 0.114);
+    const boosted = gray > 225 ? 255 : Math.max(0, Math.min(255, Math.round((gray - 128) * 1.55 + 128)));
+    processedData[i] = boosted;
+    processedData[i + 1] = boosted;
+    processedData[i + 2] = boosted;
+  }
+  outputCtx.putImageData(processedImage, 0, 0);
+
+  const processedDataUrl = outputCanvas.toDataURL('image/png');
+  const processedBlob = await new Promise((resolve, reject) => {
+    outputCanvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Không tạo được ảnh OCR sau tiền xử lý.'));
+    }, 'image/png');
+  });
+
+  return {
+    blob: processedBlob,
+    previewUrl: processedDataUrl
+  };
+}
+
+function assignFileToScoreInput(file) {
+  const input = document.getElementById('scoreOddsImage');
+  if (!input) return;
+  try {
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+  } catch (_) {
+    // Some browsers may block programmatic assignment; preview still works via direct read.
+  }
 }
 
 const TEAM_CATALOG = Array.isArray(window.__TEAM_CATALOG__) ? window.__TEAM_CATALOG__ : [];
@@ -1319,19 +1552,69 @@ document.getElementById('btnAddMatch').onclick = async () => {
 
 document.getElementById('scoreOddsImage').onchange = (e) => {
   const file = e.target.files?.[0];
-  const preview = document.getElementById('scoreOddsPreview');
+  renderScoreOddsParsedPreview([]);
   if (!file) {
-    preview.src = '';
-    preview.classList.add('hidden');
+    setScoreOddsPreview('');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    preview.src = reader.result;
-    preview.classList.remove('hidden');
-  };
-  reader.readAsDataURL(file);
+  fileToDataUrl(file)
+    .then((src) => setScoreOddsPreview(src, false))
+    .catch(() => setScoreOddsPreview(''));
 };
+
+document.getElementById('btnClearScoreImage').onclick = () => {
+  const input = document.getElementById('scoreOddsImage');
+  input.value = '';
+  setScoreOddsPreview('');
+  renderScoreOddsParsedPreview([]);
+  setMessage('Đã xóa ảnh upload. Nội dung odds trong ô nhập vẫn được giữ nguyên để bạn tự kiểm tra.', 'success');
+};
+
+document.getElementById('btnPasteScoreImage').onclick = async () => {
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      setMessage('Trình duyệt này chưa hỗ trợ đọc ảnh trực tiếp từ clipboard. Bạn thử Ctrl+V hoặc chọn file nhé.', 'error');
+      return;
+    }
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const imageType = item.types.find((type) => type.startsWith('image/'));
+      if (!imageType) continue;
+      const blob = await item.getType(imageType);
+      const file = new File([blob], `score-odds-${Date.now()}.png`, { type: blob.type || 'image/png' });
+      assignFileToScoreInput(file);
+      const src = await fileToDataUrl(file);
+      setScoreOddsPreview(src, false);
+      renderScoreOddsParsedPreview([]);
+      setMessage('Đã dán ảnh từ clipboard. Giờ bạn có thể bấm "Đọc ảnh odds".', 'success');
+      return;
+    }
+    setMessage('Clipboard hiện chưa có ảnh. Hãy copy ảnh trước rồi thử lại.', 'error');
+  } catch (e) {
+    setMessage(`Không đọc được ảnh từ clipboard: ${e.message}`, 'error');
+  }
+};
+
+document.addEventListener('paste', async (event) => {
+  const betMode = document.getElementById('newBetMode')?.value;
+  if (betMode !== 'SCORE') return;
+  const items = Array.from(event.clipboardData?.items || []);
+  const imageItem = items.find((item) => item.type && item.type.startsWith('image/'));
+  if (!imageItem) return;
+
+  event.preventDefault();
+  const file = imageItem.getAsFile();
+  if (!file) return;
+  assignFileToScoreInput(file);
+  try {
+    const src = await fileToDataUrl(file);
+    setScoreOddsPreview(src, false);
+    renderScoreOddsParsedPreview([]);
+    setMessage('Đã nhận ảnh từ Ctrl+V. Giờ bạn có thể bấm "Đọc ảnh odds".', 'success');
+  } catch (e) {
+    setMessage(`Không đọc được ảnh vừa dán: ${e.message}`, 'error');
+  }
+});
 
 document.getElementById('btnParseScoreImage').onclick = async () => {
   try {
@@ -1351,13 +1634,18 @@ document.getElementById('btnParseScoreImage').onclick = async () => {
     }
 
     setMessage('Đang đọc ảnh odds, vui lòng chờ...', 'success');
-    const result = await window.Tesseract.recognize(file, 'eng');
-    const parsed = extractScoreOddsFromOcrText(result?.data?.text || '');
-    if (!parsed) {
+    const processed = await preprocessScoreOddsImage(file);
+    setScoreOddsPreview(processed.previewUrl, true);
+    const result = await window.Tesseract.recognize(processed.blob, 'eng');
+    const pairs = extractScoreOddsPairsFromOcr(result?.data?.text || '');
+    const parsed = pairs.map(({ score, odds }) => `${score}=${odds}`).join(', ');
+    if (!pairs.length || !parsed) {
+      renderScoreOddsParsedPreview([]);
       setMessage('Không nhận diện được odds từ ảnh. Hãy thử ảnh rõ hơn hoặc nhập tay.', 'error');
       return;
     }
     document.getElementById('newScoreOdds').value = parsed;
+    renderScoreOddsParsedPreview(pairs);
     setMessage('Đã đọc ảnh và điền odds tỷ số. Vui lòng kiểm tra lại trước khi lưu.', 'success');
   } catch (e) {
     setMessage(`Đọc ảnh thất bại: ${e.message}`, 'error');

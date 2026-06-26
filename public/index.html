@@ -146,9 +146,14 @@
           <textarea id="newScoreOdds" rows="2" placeholder="Tỷ số: 1-0=9.3, 2-0=8.9, 2-1=7.9&#10;3-0=12, 3-1=12, 0-0=19" style="min-width:320px"></textarea>
           <div id="newScoreTools" class="score-upload-tools">
             <input id="scoreOddsImage" type="file" accept="image/*" />
-            <button id="btnParseScoreImage" type="button" class="alt">Đọc ảnh odds</button>
-            <div class="small">Ảnh nên chụp rõ phần bảng tỷ số và odds. Hệ thống sẽ tự điền vào ô bên trái để bạn kiểm tra lại.</div>
+            <div class="score-upload-actions">
+              <button id="btnParseScoreImage" type="button" class="alt">Đọc ảnh odds</button>
+              <button id="btnPasteScoreImage" type="button" class="ghost">Dán ảnh</button>
+              <button id="btnClearScoreImage" type="button" class="ghost">Xóa ảnh</button>
+            </div>
+            <div class="small">Ảnh nên chụp rõ phần bảng tỷ số và odds. Có thể bấm chọn file hoặc copy ảnh rồi nhấn Ctrl+V. Hệ thống sẽ tự tiền xử lý ảnh trước khi OCR.</div>
             <img id="scoreOddsPreview" class="score-upload-preview hidden" alt="Preview odds upload" />
+            <div id="scoreOddsParsedPreview" class="score-parsed-preview hidden"></div>
           </div>
           <button id="btnAddMatch">Thêm trận</button>
         </div>
