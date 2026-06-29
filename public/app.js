@@ -290,6 +290,34 @@ function normalizeOcrScoreToken(token) {
   return `${Number(match[1])}-${Number(match[2])}`;
 }
 
+function extractScoreTokensFromLine(line) {
+  const explicitMatches = [...String(line || '').matchAll(/([0-9OIlD]{1,2}\s*[-:]\s*[0-9OIlD]{1,2})/g)]
+    .map((match) => normalizeOcrScoreToken(match[0]))
+    .filter(Boolean);
+  if (explicitMatches.length) return explicitMatches;
+
+  const compactLine = String(line || '').replace(/\s+/g, ' ').trim();
+  if (!compactLine || /[.,]/.test(compactLine)) return [];
+
+  const spacedPairs = [...compactLine.matchAll(/(?:^|\s)([0-9OIlD])\s+([0-9OIlD])(?=\s|$)/g)]
+    .map((match) => normalizeOcrScoreToken(`${match[1]}-${match[2]}`))
+    .filter(Boolean);
+
+  return spacedPairs.length >= 2 ? spacedPairs : [];
+}
+
+function extractOddsTokensFromLine(line) {
+  return [...String(line || '').matchAll(/\d+(?:[.,]\d+)?/g)]
+    .map((match) => match[0])
+    .filter((token) => Number(String(token).replace(/,/g, '.')) > 1);
+}
+
+function stripScoreTokensFromLine(line) {
+  return String(line || '')
+    .replace(/([0-9OIlD]{1,2}\s*[-:]\s*[0-9OIlD]{1,2})/g, ' ')
+    .replace(/(?:^|\s)([0-9OIlD])\s+([0-9OIlD])(?=\s|$)/g, ' ');
+}
+
 function extractScoreOddsPairsFromOcr(rawText) {
   const raw = String(rawText || '');
   if (!raw.trim()) return [];
@@ -302,7 +330,6 @@ function extractScoreOddsPairsFromOcr(rawText) {
 
   const pairs = [];
   const seen = new Set();
-  const scorePattern = /([0-9OIlD]{1,2}\s*[-:]\s*[0-9OIlD]{1,2})/g;
 
   const pushPair = (score, oddsText) => {
     const normalizedScore = normalizeOcrScoreToken(score);
@@ -313,25 +340,38 @@ function extractScoreOddsPairsFromOcr(rawText) {
     pairs.push({ score: normalizedScore, odds: String(odds) });
   };
 
-  for (const line of lines) {
-    const scoreMatches = [...line.matchAll(scorePattern)].map((match) => match[0]);
+  const usedLineIndexes = new Set();
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const scoreMatches = extractScoreTokensFromLine(line);
     if (!scoreMatches.length) continue;
 
-    let strippedLine = line;
-    for (const scoreText of scoreMatches) {
-      strippedLine = strippedLine.replace(scoreText, ' ');
+    const inlineOdds = extractOddsTokensFromLine(stripScoreTokensFromLine(line));
+    if (inlineOdds.length === scoreMatches.length) {
+      scoreMatches.forEach((score, index) => pushPair(score, inlineOdds[index]));
+      usedLineIndexes.add(i);
+      continue;
     }
 
-    const oddsMatches = [...strippedLine.matchAll(/\d+(?:[.,]\d+)?/g)]
-      .map((match) => match[0])
-      .filter((token) => Number(String(token).replace(/,/g, '.')) > 1);
-
-    if (scoreMatches.length === oddsMatches.length) {
-      scoreMatches.forEach((score, index) => pushPair(score, oddsMatches[index]));
+    for (let offset = 1; offset <= 2; offset += 1) {
+      const nextIndex = i + offset;
+      if (nextIndex >= lines.length) break;
+      if (usedLineIndexes.has(nextIndex)) continue;
+      const nextLine = lines[nextIndex];
+      const nextLineScores = extractScoreTokensFromLine(nextLine);
+      if (nextLineScores.length) continue;
+      const nextLineOdds = extractOddsTokensFromLine(nextLine);
+      if (nextLineOdds.length >= scoreMatches.length) {
+        scoreMatches.forEach((score, index) => pushPair(score, nextLineOdds[index]));
+        usedLineIndexes.add(i);
+        usedLineIndexes.add(nextIndex);
+        break;
+      }
     }
   }
 
-  if (pairs.length) return pairs;
+  if (pairs.length >= 6) return pairs;
 
   const normalized = raw
     .replace(/[–—−]/g, '-')
