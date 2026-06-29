@@ -321,6 +321,20 @@ function extractScoreTokensFromLine(line) {
   return spacedPairs.length >= 2 ? spacedPairs : [];
 }
 
+function extractSpecialScoreTokensFromLine(line) {
+  const normalized = String(line || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+  if (normalized.includes('other score') || normalized.includes('other scores') || normalized.includes('ty so khac') || normalized.includes('ti so khac') || normalized.includes('con lai')) {
+    return ['OTHER'];
+  }
+  return [];
+}
+
 function extractOddsTokensFromLine(line) {
   return [...String(line || '').matchAll(/\d+(?:[.,]\d+)?/g)]
     .map((match) => match[0])
@@ -359,7 +373,7 @@ function extractScoreOddsPairsFromOcr(rawText) {
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const scoreMatches = extractScoreTokensFromLine(line);
+    const scoreMatches = [...extractScoreTokensFromLine(line), ...extractSpecialScoreTokensFromLine(line)];
     if (!scoreMatches.length) continue;
 
     const inlineOdds = extractOddsTokensFromLine(stripScoreTokensFromLine(line));
@@ -374,7 +388,7 @@ function extractScoreOddsPairsFromOcr(rawText) {
       if (nextIndex >= lines.length) break;
       if (usedLineIndexes.has(nextIndex)) continue;
       const nextLine = lines[nextIndex];
-      const nextLineScores = extractScoreTokensFromLine(nextLine);
+      const nextLineScores = [...extractScoreTokensFromLine(nextLine), ...extractSpecialScoreTokensFromLine(nextLine)];
       if (nextLineScores.length) continue;
       const nextLineOdds = extractOddsTokensFromLine(nextLine);
       if (nextLineOdds.length >= scoreMatches.length) {
@@ -473,6 +487,15 @@ function fileToDataUrl(file) {
     reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('Không đọc được file ảnh.'));
     reader.readAsDataURL(file);
+  });
+}
+
+async function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Không tạo được ảnh từ canvas.'));
+    }, 'image/png');
   });
 }
 
@@ -580,6 +603,61 @@ async function preprocessScoreOddsImage(file) {
     blob: processedBlob,
     previewUrl: processedDataUrl
   };
+}
+
+async function splitScoreOddsColumns(imageSrc) {
+  const image = await loadImageElement(imageSrc);
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const activeXs = [];
+  for (let x = 0; x < width; x += 1) {
+    let darkCount = 0;
+    for (let y = 0; y < height; y += 1) {
+      const index = (y * width + x) * 4;
+      const gray = (data[index] + data[index + 1] + data[index + 2]) / 3;
+      if (gray < 245) darkCount += 1;
+    }
+    activeXs.push(darkCount >= Math.max(8, Math.floor(height * 0.018)));
+  }
+
+  const bands = [];
+  let start = -1;
+  for (let x = 0; x < activeXs.length; x += 1) {
+    if (activeXs[x] && start === -1) start = x;
+    if ((!activeXs[x] || x === activeXs.length - 1) && start !== -1) {
+      const end = activeXs[x] ? x : x - 1;
+      if ((end - start + 1) >= Math.floor(width * 0.12)) {
+        bands.push({ start, end });
+      }
+      start = -1;
+    }
+  }
+
+  if (!bands.length) {
+    return [await canvasToBlob(canvas)];
+  }
+
+  const paddedBands = bands.map((band) => ({
+    start: Math.max(0, band.start - 10),
+    end: Math.min(width - 1, band.end + 10)
+  }));
+
+  const blobs = [];
+  for (const band of paddedBands) {
+    const cropWidth = band.end - band.start + 1;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropWidth;
+    cropCanvas.height = height;
+    const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+    cropCtx.drawImage(canvas, band.start, 0, cropWidth, height, 0, 0, cropWidth, height);
+    blobs.push(await canvasToBlob(cropCanvas));
+  }
+  return blobs;
 }
 
 function assignFileToScoreInput(file) {
@@ -1721,8 +1799,13 @@ document.getElementById('btnParseScoreImage').onclick = async () => {
     setMessage('Đang đọc ảnh odds, vui lòng chờ...', 'success');
     const processed = await preprocessScoreOddsImage(file);
     setScoreOddsPreview(processed.previewUrl, true);
-    const result = await window.Tesseract.recognize(processed.blob, 'eng');
-    const pairs = extractScoreOddsPairsFromOcr(result?.data?.text || '');
+    const columnBlobs = await splitScoreOddsColumns(processed.previewUrl);
+    const ocrTexts = [];
+    for (const blob of columnBlobs) {
+      const result = await window.Tesseract.recognize(blob, 'eng');
+      ocrTexts.push(result?.data?.text || '');
+    }
+    const pairs = extractScoreOddsPairsFromOcr(ocrTexts.join('\n'));
     const parsed = pairs.map(({ score, odds }) => `${score}=${odds}`).join(', ');
     if (!pairs.length || !parsed) {
       renderScoreOddsParsedPreview([]);
