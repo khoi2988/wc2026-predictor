@@ -435,6 +435,32 @@ function extractScoreOddsPairsFromOcr(rawText) {
   return pairs;
 }
 
+function extractScoreOddsPairsFromRowTexts(rowTexts) {
+  const pairs = [];
+  const seen = new Set();
+
+  for (const rowText of rowTexts || []) {
+    const line = String(rowText || '').replace(/\s+/g, ' ').trim();
+    if (!line) continue;
+
+    const scoreMatches = [...extractScoreTokensFromLine(line), ...extractSpecialScoreTokensFromLine(line)];
+    if (!scoreMatches.length) continue;
+
+    const stripped = stripScoreTokensFromLine(line);
+    const oddsMatches = extractOddsTokensFromLine(stripped.length ? stripped : line);
+    if (!oddsMatches.length) continue;
+
+    const score = scoreMatches[0];
+    const odds = Number(String(oddsMatches[oddsMatches.length - 1]).replace(/,/g, '.'));
+    if (!score || Number.isNaN(odds) || odds <= 1) continue;
+    if (seen.has(score)) continue;
+    seen.add(score);
+    pairs.push({ score, odds: String(odds) });
+  }
+
+  return pairs;
+}
+
 function extractScoreOddsFromOcrText(rawText) {
   return extractScoreOddsPairsFromOcr(rawText)
     .map(({ score, odds }) => `${score}=${odds}`)
@@ -658,6 +684,59 @@ async function splitScoreOddsColumns(imageSrc) {
     blobs.push(await canvasToBlob(cropCanvas));
   }
   return blobs;
+}
+
+async function splitScoreOddsRows(imageBlob) {
+  const imageSrc = typeof imageBlob === 'string' ? imageBlob : await fileToDataUrl(imageBlob);
+  const image = await loadImageElement(imageSrc);
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth || image.width;
+  canvas.height = image.naturalHeight || image.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const activeYs = [];
+  for (let y = 0; y < height; y += 1) {
+    let darkCount = 0;
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const gray = (data[index] + data[index + 1] + data[index + 2]) / 3;
+      if (gray < 245) darkCount += 1;
+    }
+    activeYs.push(darkCount >= Math.max(6, Math.floor(width * 0.015)));
+  }
+
+  const bands = [];
+  let start = -1;
+  for (let y = 0; y < activeYs.length; y += 1) {
+    if (activeYs[y] && start === -1) start = y;
+    if ((!activeYs[y] || y === activeYs.length - 1) && start !== -1) {
+      const end = activeYs[y] ? y : y - 1;
+      if ((end - start + 1) >= 10) {
+        bands.push({ start, end });
+      }
+      start = -1;
+    }
+  }
+
+  if (!bands.length) {
+    return [await canvasToBlob(canvas)];
+  }
+
+  const rowBlobs = [];
+  for (const band of bands) {
+    const top = Math.max(0, band.start - 6);
+    const bottom = Math.min(height - 1, band.end + 6);
+    const rowHeight = bottom - top + 1;
+    const rowCanvas = document.createElement('canvas');
+    rowCanvas.width = width;
+    rowCanvas.height = rowHeight;
+    const rowCtx = rowCanvas.getContext('2d', { willReadFrequently: true });
+    rowCtx.drawImage(canvas, 0, top, width, rowHeight, 0, 0, width, rowHeight);
+    rowBlobs.push(await canvasToBlob(rowCanvas));
+  }
+  return rowBlobs;
 }
 
 function assignFileToScoreInput(file) {
@@ -1800,12 +1879,23 @@ document.getElementById('btnParseScoreImage').onclick = async () => {
     const processed = await preprocessScoreOddsImage(file);
     setScoreOddsPreview(processed.previewUrl, true);
     const columnBlobs = await splitScoreOddsColumns(processed.previewUrl);
+    const rowTexts = [];
     const ocrTexts = [];
     for (const blob of columnBlobs) {
-      const result = await window.Tesseract.recognize(blob, 'eng');
-      ocrTexts.push(result?.data?.text || '');
+      const rowBlobs = await splitScoreOddsRows(blob);
+      for (const rowBlob of rowBlobs) {
+        const result = await window.Tesseract.recognize(rowBlob, 'eng', {
+          tessedit_pageseg_mode: '7'
+        });
+        const text = result?.data?.text || '';
+        rowTexts.push(text);
+        ocrTexts.push(text);
+      }
     }
-    const pairs = extractScoreOddsPairsFromOcr(ocrTexts.join('\n'));
+    let pairs = extractScoreOddsPairsFromRowTexts(rowTexts);
+    if (pairs.length < 8) {
+      pairs = extractScoreOddsPairsFromOcr(ocrTexts.join('\n'));
+    }
     const parsed = pairs.map(({ score, odds }) => `${score}=${odds}`).join(', ');
     if (!pairs.length || !parsed) {
       renderScoreOddsParsedPreview([]);
