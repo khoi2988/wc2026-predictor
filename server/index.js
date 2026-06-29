@@ -124,14 +124,25 @@ function canonicalTeamName(name) {
   return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
 }
 
+function normalizeScoreOddsKey(score) {
+  const raw = String(score || '').trim();
+  const normalizedText = normalizeName(raw);
+  if (['other', 'others', 'other score', 'other scores', 'ty so khac', 'cac ty so con lai', 'con lai', 'rest'].includes(normalizedText)) {
+    return 'OTHER';
+  }
+  const match = raw.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (!match) return '';
+  return `${Number(match[1])}-${Number(match[2])}`;
+}
+
 function normalizeScoreOddsMap(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const result = {};
   for (const [score, rawOdds] of Object.entries(value)) {
-    const match = String(score).trim().match(/^(\d+)\s*-\s*(\d+)$/);
+    const scoreKey = normalizeScoreOddsKey(score);
     const odds = Number(rawOdds);
-    if (!match || Number.isNaN(odds) || odds <= 1) continue;
-    result[`${Number(match[1])}-${Number(match[2])}`] = odds;
+    if (!scoreKey || Number.isNaN(odds) || odds <= 1) continue;
+    result[scoreKey] = odds;
   }
   return result;
 }
@@ -148,12 +159,15 @@ function parseScoreOddsInput(raw) {
     .map((item) => item.trim())
     .filter(Boolean);
   for (const part of parts) {
-    const match = part.match(/^(\d+)\s*-\s*(\d+)\s*[:=]\s*(\d+(?:\.\d+)?)$/);
+    const match = part.match(/^(.+?)\s*[:=]\s*(\d+(?:\.\d+)?)$/);
     if (!match) {
       throw new Error(`Invalid exact score entry: ${part}`);
     }
-    const scoreKey = `${Number(match[1])}-${Number(match[2])}`;
-    const odds = Number(match[3]);
+    const scoreKey = normalizeScoreOddsKey(match[1]);
+    const odds = Number(match[2]);
+    if (!scoreKey) {
+      throw new Error(`Invalid exact score entry: ${part}`);
+    }
     if (Number.isNaN(odds) || odds <= 1) {
       throw new Error(`Invalid exact score odds: ${part}`);
     }
@@ -816,6 +830,12 @@ function calculateBetSettlement(match, bet) {
     const actualScore = `${match.home_score}-${match.away_score}`;
     if (bet.pick === actualScore) {
       return { status: 'won', payout: Math.floor(bet.stake * bet.odds) };
+    }
+    if (bet.pick === 'OTHER') {
+      const scoreOdds = normalizeScoreOddsMap(match.score_odds);
+      if (!Object.prototype.hasOwnProperty.call(scoreOdds, actualScore)) {
+        return { status: 'won', payout: Math.floor(bet.stake * bet.odds) };
+      }
     }
     return { status: 'lost', payout: 0 };
   }
@@ -1524,7 +1544,7 @@ app.post('/api/bets', requireAuth, (req, res) => {
   if (
     (market === '1X2' && !['HOME', 'DRAW', 'AWAY'].includes(pick)) ||
     (market === 'HANDICAP' && !['HOME', 'AWAY'].includes(pick)) ||
-    (market === 'SCORE' && !/^\d+\-\d+$/.test(pick))
+    (market === 'SCORE' && pick !== 'OTHER' && !/^\d+\-\d+$/.test(pick))
   ) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
   }

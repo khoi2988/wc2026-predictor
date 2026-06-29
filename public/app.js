@@ -269,14 +269,29 @@ function scoreOddsSummary(scoreOdds) {
   if (!entries.length) return '-';
   return entries
     .slice(0, 6)
-    .map(([score, odds]) => `${score}=${odds}`)
+    .map(([score, odds]) => `${score === 'OTHER' ? 'OTHER' : score}=${odds}`)
     .join(', ') + (entries.length > 6 ? '...' : '');
 }
 
 function formatScoreOddsInput(scoreOdds) {
   return Object.entries(scoreOdds || {})
-    .map(([score, odds]) => `${score}=${odds}`)
+    .map(([score, odds]) => `${score === 'OTHER' ? 'OTHER' : score}=${odds}`)
     .join(', ');
+}
+
+function sortScoreOddsEntries(scoreOdds) {
+  return Object.entries(scoreOdds || {}).sort(([left], [right]) => {
+    if (left === 'OTHER') return 1;
+    if (right === 'OTHER') return -1;
+    const [lh, la] = left.split('-').map(Number);
+    const [rh, ra] = right.split('-').map(Number);
+    if (lh !== rh) return lh - rh;
+    return la - ra;
+  });
+}
+
+function scorePickLabel(score) {
+  return score === 'OTHER' ? 'Tỷ số khác' : score;
 }
 
 function normalizeOcrScoreToken(token) {
@@ -667,7 +682,7 @@ function betPickText(bet) {
     if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
     if (bet.pick === 'AWAY') return `${bet.team_b} +${bet.handicap_line ?? 0}`;
   }
-  if (bet.market === 'SCORE') return bet.pick;
+  if (bet.market === 'SCORE') return scorePickLabel(bet.pick);
   if (bet.pick === 'HOME') return tr('betPickWin', { team: bet.team_a }, `${bet.team_a} thắng`);
   if (bet.pick === 'DRAW') return tr('pickDraw', {}, 'Hòa');
   return tr('betPickWin', { team: bet.team_b }, `${bet.team_b} thắng`);
@@ -1054,12 +1069,12 @@ async function renderMatches() {
     const myScorePicks = new Set(myScoreBets.map((bet) => bet.pick));
     const scoreBetCount = myScoreBets.length;
     const reachedScoreLimit = scoreBetCount >= 3;
-    const availableScoreEntries = Object.entries(m.score_odds || {}).filter(([score]) => !myScorePicks.has(score));
-    const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : Object.entries(m.score_odds || {});
+    const scoreEntries = sortScoreOddsEntries(m.score_odds || {});
+    const availableScoreEntries = scoreEntries.filter(([score]) => !myScorePicks.has(score));
+    const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : scoreEntries;
     const openStatus = scoreBetCount > 0
       ? `Đã đặt ${scoreBetCount}/3`
       : tr('matchNotYetBet', {}, 'Chưa đặt cược');
-    const scoreEntries = Object.entries(m.score_odds || {});
     return `
       <div class="score-match-card">
         <div class="score-card-head">
@@ -1075,20 +1090,20 @@ async function renderMatches() {
         <div class="score-odds-grid">
           ${scoreEntries.map(([score, odds]) => `
             <div class="score-odds-chip">
-              <strong>${score}</strong>
+              <strong>${scorePickLabel(score)}</strong>
               <span class="small">Odds: ${odds}</span>
             </div>
           `).join('')}
         </div>
         <div class="score-bet-panel">
           <select id="score-pick-${m.id}" ${reachedScoreLimit ? 'disabled' : ''}>
-            ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+            ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${scorePickLabel(score)} (odds ${odds})</option>`).join('')}
           </select>
           <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
           <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')" ${reachedScoreLimit ? 'disabled' : ''}>${tr('betAction', {}, 'Đặt')}</button>
           <div class="small bet-meta">
             ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
-            ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${bet.pick} (${bet.odds})`).join(', ')}` : ''}
+            ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${scorePickLabel(bet.pick)} (${bet.odds})`).join(', ')}` : ''}
           </div>
         </div>
       </div>
@@ -1118,7 +1133,7 @@ async function renderMatches() {
     const odds2Cell = mode === '1X2'
       ? `<div class="odds-block"><div>${tr('odds2Text', { team: teamLabel(m.team_b) }, `Kèo 2: ${teamLabel(m.team_b)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_away }, `Tỷ lệ: ${m.odds_away}`)}</span></div>`
       : '<span class="small">-</span>';
-    const scoreEntries = Object.entries(m.score_odds || {});
+    const scoreEntries = sortScoreOddsEntries(m.score_odds || {});
     const availableScoreEntries = scoreEntries.filter(([score]) => !myScorePicks.has(score));
     const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : scoreEntries;
     const scoreCell = mode === 'SCORE'
@@ -1160,11 +1175,11 @@ async function renderMatches() {
                   <div class="small bet-mode">${tr('betModeScore', {}, 'Tỷ số chính xác')}</div>
                   <div class="small bet-meta">
                     ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
-                    ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${bet.pick} (${bet.odds})`).join(', ')}` : ''}
+                    ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${scorePickLabel(bet.pick)} (${bet.odds})`).join(', ')}` : ''}
                   </div>
                   <div class="bet-controls">
                     <select id="score-pick-${m.id}" ${reachedScoreLimit ? 'disabled' : ''}>
-                      ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+                      ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${scorePickLabel(score)} (odds ${odds})</option>`).join('')}
                     </select>
                     <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
                   </div>
