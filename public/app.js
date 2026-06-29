@@ -1767,11 +1767,11 @@ window.exportMatchSettlement = function (matchId) {
 
 window.deleteMatch = async function (matchId) {
   try {
-    if (!window.confirm('Xóa trận chỉ nên dùng khi chưa có ai đặt cược. Bạn chắc chắn muốn xóa trận này?')) {
+    if (!window.confirm('Xóa trận này sẽ hoàn lại điểm cược cho tất cả người chơi nếu trận chưa chốt. Bạn chắc chắn muốn xóa trận này?')) {
       return;
     }
     const result = await adminApi(`/api/admin/matches/${matchId}`, { method: 'DELETE' });
-    setMessage(`Xóa trận thành công. Hoàn ${result.refundedBets || 0} cược.`, 'success');
+    setMessage(`Xóa trận thành công. Hoàn ${result.refundedBets || 0} cược / ${result.refundedPoints || 0} điểm.`, 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
   } catch (e) {
     setMessage(e.message, 'error');

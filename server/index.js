@@ -1791,15 +1791,25 @@ app.delete('/api/admin/matches/:id', requireAdmin, (req, res) => {
   if (match.result) return res.status(400).json({ error: 'Cannot delete settled match.' });
 
   const relatedBets = db.bets.filter((b) => b.match_id === matchId);
-  if (relatedBets.length > 0) {
-    return res.status(400).json({
-      error: `Không thể xóa trận đã có ${relatedBets.length} cược vì sẽ làm mất lịch sử cược. Hãy chốt kết quả hoặc giữ trận này trong hệ thống.`
-    });
+  let refundedBets = 0;
+  let refundedPoints = 0;
+
+  for (const bet of relatedBets) {
+    if (bet.status === 'open') {
+      const user = db.users.find((u) => u.id === bet.user_id);
+      if (user) {
+        user.points += bet.stake;
+        refundedPoints += bet.stake;
+      }
+      refundedBets += 1;
+    }
   }
+
+  db.bets = db.bets.filter((b) => b.match_id !== matchId);
 
   db.matches.splice(idx, 1);
   saveDb();
-  res.json({ ok: true, refundedBets: 0 });
+  res.json({ ok: true, refundedBets, refundedPoints });
 });
 
 app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) => {
