@@ -202,12 +202,10 @@ function syncMaintenanceUI() {
   setVisible(els.maintenanceCard, isBlocked);
 
   if (els.maintenanceText) {
-    els.maintenanceText.textContent = maintenanceState.message || 'Hệ thống đang tạm bảo trì. Chỉ tài khoản admin hoặc operator được phép truy cập trong thời gian này.';
+    els.maintenanceText.textContent = maintenanceState.message || 'Hệ thống đang tạm bảo trì. Vui lòng quay lại sau.';
   }
   if (els.maintenanceHint) {
-    els.maintenanceHint.textContent = isBlocked
-      ? 'Nếu bạn là admin/operator, bạn vẫn có thể đăng nhập ở khung phía trên.'
-      : '';
+    els.maintenanceHint.textContent = '';
   }
 
   const showRegisterLink = document.getElementById('showRegister');
@@ -217,7 +215,7 @@ function syncMaintenanceUI() {
   }
   if (loginHint) {
     loginHint.textContent = isMaintenanceEnabled
-      ? 'Trang đang bảo trì: chỉ admin/operator được đăng nhập.'
+      ? 'Đăng ký tạm thời bị tắt khi bảo trì.'
       : 'Chưa có tài khoản?';
   }
   if (isMaintenanceEnabled && !els.registerForm.classList.contains('hidden')) {
@@ -868,7 +866,7 @@ async function renderAdminUsers() {
     const rows = data.users.map((u) => `
       <tr>
         <td>${u.id}</td>
-        <td>${u.username}${u.is_admin ? ' (admin)' : ''}<br><span class="small">${u.full_name || '-'}</span></td>
+        <td>${u.username}<br><span class="small">${u.full_name || '-'}</span></td>
         <td>
           <button onclick="exportUserHistory(${u.id})">Export lịch sử</button>
           ${isAdmin ? `<button onclick="resetUserPassword(${u.id})">Reset password</button>` : ''}
@@ -877,7 +875,7 @@ async function renderAdminUsers() {
         ${isAdmin ? `
         <td>${u.points}</td>
         <td>
-          ${u.is_admin ? '<span class="small">Full</span>' : `
+          ${u.is_admin ? '<span class="small">-</span>' : `
             <label><input type="checkbox" id="perm-odds-${u.id}" ${u.can_manage_odds ? 'checked' : ''} /> Set kèo</label><br>
             <label><input type="checkbox" id="perm-result-${u.id}" ${u.can_set_result ? 'checked' : ''} /> Set tỷ số/KQ</label><br>
             <label><input type="checkbox" id="perm-export-${u.id}" ${u.can_export_user_history ? 'checked' : ''} /> Export lịch sử user</label><br>
