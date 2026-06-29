@@ -1009,7 +1009,7 @@ async function renderMatches() {
             <div class="small match-kickoff">${fmtTime(m.kickoff_at)}</div>
           </div>
           <div class="score-card-meta">
-            <span class="status-pill ${isAdmin ? 'status-closed' : (hasMyBet ? 'status-closed' : 'status-open')}">${isAdmin ? 'Admin có thể đặt mọi lúc' : openStatus}</span>
+            <span class="status-pill ${(hasMyBet || isAdmin) ? 'status-closed' : 'status-open'}">${openStatus}</span>
             <div class="small match-substatus">${m.result ? `KQ: ${matchResultText(m)}` : tr('resultPending', {}, 'Chưa có kết quả')}</div>
           </div>
         </div>
@@ -1067,7 +1067,7 @@ async function renderMatches() {
         <td>${mode === 'SCORE' ? scoreCell : odds2Cell}</td>
         <td>
           ${closed
-            ? `<span class="status-pill status-closed">${result}</span>${isAdmin ? `<div class="small match-substatus">Admin vẫn có thể đặt cược</div>` : ''}`
+            ? `<span class="status-pill status-closed">${result}</span>`
             : `<span class="status-pill ${hasMyBet ? 'status-closed' : 'status-open'}">${openStatus}</span><div class="small match-substatus">${tr('resultPending', {}, 'Chưa có kết quả')}</div>`}
         </td>
         <td>
@@ -1088,7 +1088,7 @@ async function renderMatches() {
             ` : mode === 'SCORE' ? `
               ${closed && isAdmin ? `
                 <div class="bet-box">
-                  <div class="small bet-mode">Admin đặt tỷ số chính xác</div>
+                  <div class="small bet-mode">${tr('betModeScore', {}, 'Tỷ số chính xác')}</div>
                   <div class="small bet-meta">${scoreEntries.length} tỷ số đang mở</div>
                   <div class="bet-controls">
                     <select id="score-pick-${m.id}">
