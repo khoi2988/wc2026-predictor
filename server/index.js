@@ -1542,8 +1542,20 @@ app.post('/api/bets', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Betting closed (kickoff passed).' });
   }
 
-  const existed = db.bets.some((b) => b.user_id === req.session.user.id && b.match_id === matchId);
-  if (existed) return res.status(409).json({ error: 'You already bet on this match.' });
+  const existingOpenBets = db.bets.filter(
+    (b) => b.user_id === req.session.user.id && b.match_id === matchId && b.status === 'open'
+  );
+  if (market === 'SCORE') {
+    const existingScoreBets = existingOpenBets.filter((b) => b.market === 'SCORE');
+    if (existingScoreBets.some((b) => b.pick === pick)) {
+      return res.status(409).json({ error: 'You already bet this exact score.' });
+    }
+    if (existingScoreBets.length >= 3) {
+      return res.status(409).json({ error: 'You can only keep up to 3 exact score bets for this match.' });
+    }
+  } else if (existingOpenBets.length) {
+    return res.status(409).json({ error: 'You already bet on this match.' });
+  }
 
   if (!user || user.points < stake) return res.status(400).json({ error: 'Not enough points.' });
 

@@ -6,6 +6,15 @@
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (data.error === 'You already bet on this match.') {
+      throw new Error('Bạn đã đặt cược trận này rồi.');
+    }
+    if (data.error === 'You already bet this exact score.') {
+      throw new Error('Bạn đã chọn tỷ số này rồi. Hãy chọn tỷ số khác.');
+    }
+    if (data.error === 'You can only keep up to 3 exact score bets for this match.') {
+      throw new Error('Mỗi trận chỉ được giữ tối đa 3 vé tỷ số chính xác.');
+    }
     if (res.status === 401) {
       if (data.error === 'Invalid credentials.') {
         throw new Error('Sai tên đăng nhập hoặc mật khẩu.');
@@ -989,16 +998,26 @@ async function renderMatches() {
     api('/api/matches'),
     api('/api/my-bets')
   ]);
+  const openBets = (myBetsData.bets || []).filter((b) => b.status === 'open');
   const myOpenMatchIds = new Set(
-    (myBetsData.bets || [])
-      .filter((b) => b.status === 'open')
+    openBets
       .map((b) => b.match_id)
   );
+  const myOpenScoreBetsByMatch = openBets.reduce((acc, bet) => {
+    if (bet.market !== 'SCORE') return acc;
+    if (!acc[bet.match_id]) acc[bet.match_id] = [];
+    acc[bet.match_id].push(bet);
+    return acc;
+  }, {});
   const buildScoreCard = (m) => {
-    const isAdmin = Boolean(currentUser?.is_admin);
-    const hasMyBet = myOpenMatchIds.has(m.id);
-    const openStatus = hasMyBet
-      ? tr('matchAlreadyBet', {}, 'Đã đặt cược')
+    const myScoreBets = myOpenScoreBetsByMatch[m.id] || [];
+    const myScorePicks = new Set(myScoreBets.map((bet) => bet.pick));
+    const scoreBetCount = myScoreBets.length;
+    const reachedScoreLimit = scoreBetCount >= 3;
+    const availableScoreEntries = Object.entries(m.score_odds || {}).filter(([score]) => !myScorePicks.has(score));
+    const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : Object.entries(m.score_odds || {});
+    const openStatus = scoreBetCount > 0
+      ? `Đã đặt ${scoreBetCount}/3`
       : tr('matchNotYetBet', {}, 'Chưa đặt cược');
     const scoreEntries = Object.entries(m.score_odds || {});
     return `
@@ -1009,7 +1028,7 @@ async function renderMatches() {
             <div class="small match-kickoff">${fmtTime(m.kickoff_at)}</div>
           </div>
           <div class="score-card-meta">
-            <span class="status-pill ${(hasMyBet || isAdmin) ? 'status-closed' : 'status-open'}">${openStatus}</span>
+            <span class="status-pill ${reachedScoreLimit ? 'status-closed' : 'status-open'}">${openStatus}</span>
             <div class="small match-substatus">${m.result ? `KQ: ${matchResultText(m)}` : tr('resultPending', {}, 'Chưa có kết quả')}</div>
           </div>
         </div>
@@ -1022,17 +1041,25 @@ async function renderMatches() {
           `).join('')}
         </div>
         <div class="score-bet-panel">
-          <select id="score-pick-${m.id}">
-            ${scoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+          <select id="score-pick-${m.id}" ${reachedScoreLimit ? 'disabled' : ''}>
+            ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
           </select>
-          <input id="score-stake-${m.id}" type="number" min="1" value="100" />
-          <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')">${tr('betAction', {}, 'Đặt')}</button>
+          <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
+          <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')" ${reachedScoreLimit ? 'disabled' : ''}>${tr('betAction', {}, 'Đặt')}</button>
+          <div class="small bet-meta">
+            ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
+            ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${bet.pick} (${bet.odds})`).join(', ')}` : ''}
+          </div>
         </div>
       </div>
     `;
   };
   const buildRow = (m, closed) => {
     const isAdmin = Boolean(currentUser?.is_admin);
+    const myScoreBets = myOpenScoreBetsByMatch[m.id] || [];
+    const myScorePicks = new Set(myScoreBets.map((bet) => bet.pick));
+    const scoreBetCount = myScoreBets.length;
+    const reachedScoreLimit = scoreBetCount >= 3;
     const resultText = m.result ? matchResultText(m) : tr('resultPending', {}, 'Chưa có kết quả');
     const result = m.result
       ? tr('resultLabel', { result: resultText }, `KQ: ${resultText}`)
@@ -1052,6 +1079,8 @@ async function renderMatches() {
       ? `<div class="odds-block"><div>${tr('odds2Text', { team: teamLabel(m.team_b) }, `Kèo 2: ${teamLabel(m.team_b)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_away }, `Tỷ lệ: ${m.odds_away}`)}</span></div>`
       : '<span class="small">-</span>';
     const scoreEntries = Object.entries(m.score_odds || {});
+    const availableScoreEntries = scoreEntries.filter(([score]) => !myScorePicks.has(score));
+    const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : scoreEntries;
     const scoreCell = mode === 'SCORE'
       ? `<div class="odds-block"><div>Tỷ số mở cược</div><span class="small">${scoreOddsSummary(m.score_odds)}</span></div>`
       : '';
@@ -1089,14 +1118,17 @@ async function renderMatches() {
               ${closed && isAdmin ? `
                 <div class="bet-box">
                   <div class="small bet-mode">${tr('betModeScore', {}, 'Tỷ số chính xác')}</div>
-                  <div class="small bet-meta">${scoreEntries.length} tỷ số đang mở</div>
-                  <div class="bet-controls">
-                    <select id="score-pick-${m.id}">
-                      ${scoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
-                    </select>
-                    <input id="score-stake-${m.id}" type="number" min="1" value="100" />
+                  <div class="small bet-meta">
+                    ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
+                    ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${bet.pick} (${bet.odds})`).join(', ')}` : ''}
                   </div>
-                  <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')">${tr('betAction', {}, 'Đặt')}</button>
+                  <div class="bet-controls">
+                    <select id="score-pick-${m.id}" ${reachedScoreLimit ? 'disabled' : ''}>
+                      ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${score} (odds ${odds})</option>`).join('')}
+                    </select>
+                    <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
+                  </div>
+                  <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')" ${reachedScoreLimit ? 'disabled' : ''}>${tr('betAction', {}, 'Đặt')}</button>
                 </div>
               ` : `<div class="bet-box closed"><span class="small">Qua tab Tỷ số chính xác để đặt cược.</span></div>`}
             ` : `
