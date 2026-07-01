@@ -110,6 +110,45 @@ function normalizeName(name) {
     .replace(/\s+/g, ' ');
 }
 
+function exportMarketLabel(market, handicapLine) {
+  const normalized = String(market || '1X2').toUpperCase();
+  if (normalized === 'HANDICAP') {
+    return typeof handicapLine === 'number' ? `Kèo chấp (${handicapLine})` : 'Kèo chấp';
+  }
+  if (normalized === 'SCORE') return 'Tỷ số chính xác';
+  return '1X2';
+}
+
+function exportPickLabel(match, market, pick, handicapLine) {
+  const normalizedMarket = String(market || '1X2').toUpperCase();
+  const normalizedPick = String(pick || '');
+  if (normalizedMarket === 'HANDICAP') {
+    const lineText = typeof handicapLine === 'number' ? handicapLine : '';
+    if (normalizedPick === 'HOME') return `${match?.team_a || 'Đội A'} ${lineText >= 0 ? '-' : '+'}${Math.abs(lineText)}`;
+    if (normalizedPick === 'AWAY') return `${match?.team_b || 'Đội B'} +${lineText}`;
+    return normalizedPick;
+  }
+  if (normalizedMarket === 'SCORE') {
+    return normalizedPick === 'OTHER' ? 'Tỷ số khác' : normalizedPick;
+  }
+  if (normalizedPick === 'HOME') return `${match?.team_a || 'Đội nhà'} thắng`;
+  if (normalizedPick === 'DRAW') return 'Hòa';
+  if (normalizedPick === 'AWAY') return `${match?.team_b || 'Đội khách'} thắng`;
+  return normalizedPick;
+}
+
+function exportBetStatusLabel(status) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'open') return 'Đang mở';
+  if (normalized === 'won') return 'Thắng';
+  if (normalized === 'lost') return 'Thua';
+  if (normalized === 'refund') return 'Hoàn tiền';
+  if (normalized === 'half_won') return 'Thắng nửa';
+  if (normalized === 'half_lost') return 'Thua nửa';
+  if (normalized === 'cancelled') return 'Đã hủy';
+  return status || '';
+}
+
 const TEAM_NAME_MAP = TEAM_CATALOG.reduce((acc, team) => {
   const names = [team.canonical, ...(team.aliases || [])];
   for (const name of names) {
@@ -1393,37 +1432,37 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
     .map((b) => {
       const m = db.matches.find((x) => x.id === b.match_id);
       return {
-        bet_id: b.id,
-        username: user.username,
-        team_a: m?.team_a || b.match_team_a || '',
-        team_b: m?.team_b || b.match_team_b || '',
-        kickoff_at: m?.kickoff_at || b.match_kickoff_at || '',
-        market: b.market || '1X2',
-        handicap_line: b.handicap_line ?? '',
-        pick: b.pick,
-        stake: b.stake,
-        odds: b.odds,
-        status: b.status,
-        payout: b.payout ?? '',
-        match_result: m?.result || ''
+        'Mã cược': b.id,
+        'Tài khoản': user.username,
+        'Đội A': m?.team_a || b.match_team_a || '',
+        'Đội B': m?.team_b || b.match_team_b || '',
+        'Giờ đá': m?.kickoff_at || b.match_kickoff_at || '',
+        'Thể thức': exportMarketLabel(b.market, b.handicap_line),
+        'Kèo chấp': b.handicap_line ?? '',
+        'Lựa chọn': exportPickLabel(m || { team_a: b.match_team_a, team_b: b.match_team_b }, b.market, b.pick, b.handicap_line),
+        'Điểm cược': b.stake,
+        'Tỷ lệ': b.odds,
+        'Trạng thái': exportBetStatusLabel(b.status),
+        'Thưởng': b.payout ?? '',
+        'Kết quả trận': m?.result ? exportPickLabel(m || { team_a: b.match_team_a, team_b: b.match_team_b }, '1X2', m.result, null) : ''
       };
     })
-    .sort((a, b) => new Date(a.kickoff_at || 0) - new Date(b.kickoff_at || 0));
+    .sort((a, b) => new Date(a['Giờ đá'] || 0) - new Date(b['Giờ đá'] || 0));
 
   const header = [
-    'bet_id',
-    'username',
-    'team_a',
-    'team_b',
-    'kickoff_at',
-    'market',
-    'handicap_line',
-    'pick',
-    'stake',
-    'odds',
-    'status',
-    'payout',
-    'match_result'
+    'Mã cược',
+    'Tài khoản',
+    'Đội A',
+    'Đội B',
+    'Giờ đá',
+    'Thể thức',
+    'Kèo chấp',
+    'Lựa chọn',
+    'Điểm cược',
+    'Tỷ lệ',
+    'Trạng thái',
+    'Thưởng',
+    'Kết quả trận'
   ];
 
   const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -1434,7 +1473,7 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
 
   const fileSafe = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename=\"user_${fileSafe}_bets.csv\"`);
+  res.setHeader('Content-Disposition', `attachment; filename=\"lich_su_cuoc_${fileSafe}.csv\"`);
   res.send('\uFEFF' + csv);
 });
 
@@ -1452,51 +1491,51 @@ app.get('/api/admin/matches/:id/export-settlement', requirePermission('can_set_r
     const payout = Number.isInteger(b.payout) ? b.payout : 0;
     const netDelta = payout - b.stake;
     return {
-      user_id: b.user_id,
-      username: user?.username || '',
-      full_name: user?.full_name || '',
-      market: b.market || '1X2',
-      pick: b.pick,
-      handicap_line: b.handicap_line ?? '',
-      stake: b.stake,
-      odds: b.odds,
-      status: b.status || '',
-      payout,
-      net_delta: netDelta
+      'ID người chơi': b.user_id,
+      'Tài khoản': user?.username || '',
+      'Họ và tên': user?.full_name || '',
+      'Thể thức': exportMarketLabel(b.market, b.handicap_line),
+      'Lựa chọn': exportPickLabel(match, b.market, b.pick, b.handicap_line),
+      'Kèo chấp': b.handicap_line ?? '',
+      'Điểm cược': b.stake,
+      'Tỷ lệ': b.odds,
+      'Trạng thái': exportBetStatusLabel(b.status || ''),
+      'Thưởng': payout,
+      'Lãi/Lỗ ròng': netDelta
     };
   });
 
   const header = [
-    'match_id',
-    'team_a',
-    'team_b',
-    'kickoff_at',
-    'result',
-    'home_score',
-    'away_score',
-    'user_id',
-    'username',
-    'full_name',
-    'market',
-    'pick',
-    'handicap_line',
-    'stake',
-    'odds',
-    'status',
-    'payout',
-    'net_delta'
+    'Mã trận',
+    'Đội A',
+    'Đội B',
+    'Giờ đá',
+    'Kết quả 1X2',
+    'Bàn đội A',
+    'Bàn đội B',
+    'ID người chơi',
+    'Tài khoản',
+    'Họ và tên',
+    'Thể thức',
+    'Lựa chọn',
+    'Kèo chấp',
+    'Điểm cược',
+    'Tỷ lệ',
+    'Trạng thái',
+    'Thưởng',
+    'Lãi/Lỗ ròng'
   ];
 
   const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csvRows = rows.map((r) => {
     const record = {
-      match_id: match.id,
-      team_a: match.team_a,
-      team_b: match.team_b,
-      kickoff_at: match.kickoff_at,
-      result: match.result,
-      home_score: match.home_score ?? '',
-      away_score: match.away_score ?? '',
+      'Mã trận': match.id,
+      'Đội A': match.team_a,
+      'Đội B': match.team_b,
+      'Giờ đá': match.kickoff_at,
+      'Kết quả 1X2': exportPickLabel(match, '1X2', match.result, null),
+      'Bàn đội A': match.home_score ?? '',
+      'Bàn đội B': match.away_score ?? '',
       ...r
     };
     return header.map((k) => escapeCsv(record[k])).join(',');
@@ -1506,7 +1545,7 @@ app.get('/api/admin/matches/:id/export-settlement', requirePermission('can_set_r
   const safeA = String(match.team_a || 'A').replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeB = String(match.team_b || 'B').replace(/[^a-zA-Z0-9_-]/g, '_');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename=\"match_${match.id}_${safeA}_vs_${safeB}_settlement.csv\"`);
+  res.setHeader('Content-Disposition', `attachment; filename=\"ket_qua_tran_${match.id}_${safeA}_vs_${safeB}.csv\"`);
   res.send('\uFEFF' + csv);
 });
 
