@@ -461,6 +461,114 @@ function extractScoreOddsPairsFromRowTexts(rowTexts) {
   return pairs;
 }
 
+function normalizeOcrWordBox(word) {
+  const bbox = word?.bbox || {};
+  const x0 = Number.isFinite(bbox.x0) ? bbox.x0 : (Number.isFinite(word?.x0) ? word.x0 : 0);
+  const y0 = Number.isFinite(bbox.y0) ? bbox.y0 : (Number.isFinite(word?.y0) ? word.y0 : 0);
+  const x1 = Number.isFinite(bbox.x1) ? bbox.x1 : (Number.isFinite(word?.x1) ? word.x1 : x0);
+  const y1 = Number.isFinite(bbox.y1) ? bbox.y1 : (Number.isFinite(word?.y1) ? word.y1 : y0);
+  return {
+    text: String(word?.text || '').trim(),
+    x0,
+    y0,
+    x1,
+    y1,
+    cx: (x0 + x1) / 2,
+    cy: (y0 + y1) / 2,
+    h: Math.max(1, y1 - y0)
+  };
+}
+
+function groupOcrWordsByRow(words) {
+  const items = (words || [])
+    .map(normalizeOcrWordBox)
+    .filter((item) => item.text);
+
+  if (!items.length) return [];
+
+  const avgHeight = items.reduce((sum, item) => sum + item.h, 0) / items.length;
+  const tolerance = Math.max(10, avgHeight * 0.75);
+  const sorted = items.sort((a, b) => a.cy - b.cy || a.cx - b.cx);
+  const rows = [];
+
+  for (const item of sorted) {
+    const lastRow = rows[rows.length - 1];
+    if (!lastRow || Math.abs(lastRow.cy - item.cy) > tolerance) {
+      rows.push({ cy: item.cy, items: [item] });
+      continue;
+    }
+    lastRow.items.push(item);
+    lastRow.cy = (lastRow.cy * (lastRow.items.length - 1) + item.cy) / lastRow.items.length;
+  }
+
+  return rows.map((row) => row.items.sort((a, b) => a.cx - b.cx));
+}
+
+function extractScoreOddsPairsFromWordBoxes(words) {
+  const rows = groupOcrWordsByRow(words);
+  const pairs = [];
+  const seen = new Set();
+
+  const pushPair = (score, oddsText) => {
+    const normalizedScore = score === 'OTHER' ? 'OTHER' : normalizeOcrScoreToken(score);
+    const odds = Number(String(oddsText || '').replace(/,/g, '.'));
+    if (!normalizedScore || Number.isNaN(odds) || odds <= 1) return;
+    if (seen.has(normalizedScore)) return;
+    seen.add(normalizedScore);
+    pairs.push({ score: normalizedScore, odds: String(odds) });
+  };
+
+  for (const row of rows) {
+    const specialScore = extractSpecialScoreTokensFromLine(row.map((item) => item.text).join(' '));
+    if (specialScore.length) {
+      const lastOdds = [...row]
+        .map((item) => item.text)
+        .map((text) => extractOddsTokensFromLine(text))
+        .flat()
+        .pop();
+      if (lastOdds) pushPair('OTHER', lastOdds);
+      continue;
+    }
+
+    const scores = [];
+    const odds = [];
+
+    for (const item of row) {
+      const score = normalizeOcrScoreToken(item.text);
+      if (score) {
+        scores.push({ score, cx: item.cx });
+        continue;
+      }
+      const odd = extractOddsTokensFromLine(item.text)[0];
+      if (odd) {
+        odds.push({ odds: odd, cx: item.cx });
+      }
+    }
+
+    if (!scores.length || !odds.length) continue;
+
+    const usedOdds = new Set();
+    for (const scoreItem of scores) {
+      let bestIndex = -1;
+      let bestDistance = Infinity;
+      for (let i = 0; i < odds.length; i += 1) {
+        if (usedOdds.has(i)) continue;
+        const distance = odds[i].cx - scoreItem.cx;
+        if (distance >= 8 && distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = i;
+        }
+      }
+      if (bestIndex >= 0) {
+        usedOdds.add(bestIndex);
+        pushPair(scoreItem.score, odds[bestIndex].odds);
+      }
+    }
+  }
+
+  return pairs;
+}
+
 function extractScoreOddsFromOcrText(rawText) {
   return extractScoreOddsPairsFromOcr(rawText)
     .map(({ score, odds }) => `${score}=${odds}`)
@@ -1312,7 +1420,7 @@ async function renderMatches() {
             : `<span class="status-pill ${hasMyBet ? 'status-closed' : 'status-open'}">${openStatus}</span><div class="small match-substatus">${tr('resultPending', {}, 'Chưa có kết quả')}</div>`}
         </td>
         <td>
-          ${closed && !isAdmin ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
+          ${closed ? `<div class="bet-box closed"><span class="small">${tr('statusClosedBetting', {}, 'Đã đóng cược')}</span></div>` : `
             ${mode === 'HANDICAP' ? `
               <div class="bet-box">
                 <div class="small bet-mode">${tr('betModeLabelHandicap', {}, 'Thể thức: Kèo chấp')}</div>
@@ -1327,22 +1435,7 @@ async function renderMatches() {
                 <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">${tr('betAction', {}, 'Đặt')}</button>
               </div>
             ` : mode === 'SCORE' ? `
-              ${closed && isAdmin ? `
-                <div class="bet-box">
-                  <div class="small bet-mode">${tr('betModeScore', {}, 'Tỷ số chính xác')}</div>
-                  <div class="small bet-meta">
-                    ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
-                    ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${scorePickLabel(bet.pick)} (${bet.odds})`).join(', ')}` : ''}
-                  </div>
-                  <div class="bet-controls">
-                    <select id="score-pick-${m.id}" ${reachedScoreLimit ? 'disabled' : ''}>
-                      ${selectableScoreEntries.map(([score, odds]) => `<option value="${score}">${scorePickLabel(score)} (odds ${odds})</option>`).join('')}
-                    </select>
-                    <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
-                  </div>
-                  <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')" ${reachedScoreLimit ? 'disabled' : ''}>${tr('betAction', {}, 'Đặt')}</button>
-                </div>
-              ` : `<div class="bet-box closed"><span class="small">Qua tab Tỷ số chính xác để đặt cược.</span></div>`}
+              <div class="bet-box closed"><span class="small">${closed ? tr('statusClosedBetting', {}, 'Đã đóng cược') : 'Qua tab Tỷ số chính xác để đặt cược.'}</span></div>
             ` : `
               <div class="bet-box">
                 <div class="small bet-mode">${tr('betModeLabel1x2', {}, 'Thể thức: 1X2')}</div>
@@ -1878,23 +1971,32 @@ document.getElementById('btnParseScoreImage').onclick = async () => {
     setMessage('Đang đọc ảnh odds, vui lòng chờ...', 'success');
     const processed = await preprocessScoreOddsImage(file);
     setScoreOddsPreview(processed.previewUrl, true);
-    const columnBlobs = await splitScoreOddsColumns(processed.previewUrl);
-    const rowTexts = [];
-    const ocrTexts = [];
-    for (const blob of columnBlobs) {
-      const rowBlobs = await splitScoreOddsRows(blob);
-      for (const rowBlob of rowBlobs) {
-        const result = await window.Tesseract.recognize(rowBlob, 'eng', {
-          tessedit_pageseg_mode: '7'
-        });
-        const text = result?.data?.text || '';
-        rowTexts.push(text);
-        ocrTexts.push(text);
-      }
-    }
-    let pairs = extractScoreOddsPairsFromRowTexts(rowTexts);
+    const fullResult = await window.Tesseract.recognize(processed.blob, 'eng');
+    let pairs = extractScoreOddsPairsFromWordBoxes(fullResult?.data?.words || []);
+
     if (pairs.length < 8) {
-      pairs = extractScoreOddsPairsFromOcr(ocrTexts.join('\n'));
+      const columnBlobs = await splitScoreOddsColumns(processed.previewUrl);
+      const rowTexts = [];
+      const ocrTexts = [fullResult?.data?.text || ''];
+      for (const blob of columnBlobs) {
+        const rowBlobs = await splitScoreOddsRows(blob);
+        for (const rowBlob of rowBlobs) {
+          const result = await window.Tesseract.recognize(rowBlob, 'eng');
+          const text = result?.data?.text || '';
+          rowTexts.push(text);
+          ocrTexts.push(text);
+        }
+      }
+      const rowPairs = extractScoreOddsPairsFromRowTexts(rowTexts);
+      if (rowPairs.length > pairs.length) {
+        pairs = rowPairs;
+      }
+      if (pairs.length < 8) {
+        const textPairs = extractScoreOddsPairsFromOcr(ocrTexts.join('\n'));
+        if (textPairs.length > pairs.length) {
+          pairs = textPairs;
+        }
+      }
     }
     const parsed = pairs.map(({ score, odds }) => `${score}=${odds}`).join(', ');
     if (!pairs.length || !parsed) {

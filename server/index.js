@@ -1405,8 +1405,7 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
         odds: b.odds,
         status: b.status,
         payout: b.payout ?? '',
-        match_result: m?.result || '',
-        created_at: b.created_at
+        match_result: m?.result || ''
       };
     })
     .sort((a, b) => new Date(a.kickoff_at || 0) - new Date(b.kickoff_at || 0));
@@ -1424,8 +1423,7 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
     'odds',
     'status',
     'payout',
-    'match_result',
-    'created_at'
+    'match_result'
   ];
 
   const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -1536,7 +1534,6 @@ app.post('/api/bets', requireAuth, (req, res) => {
   const stake = Number(req.body.stake);
   const market = String(req.body.market || '1X2').toUpperCase();
   const user = db.users.find((u) => u.id === req.session.user.id);
-  const isAdmin = Boolean(user?.is_admin);
 
   if (!Number.isInteger(matchId) || !['1X2', 'HANDICAP', 'SCORE'].includes(market)) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
@@ -1557,8 +1554,8 @@ app.post('/api/bets', requireAuth, (req, res) => {
   if (market !== String(match.bet_mode || '1X2')) {
     return res.status(400).json({ error: 'Trận này chỉ cho phép một thể thức cược đã cấu hình.' });
   }
-  if (!isAdmin && match.result) return res.status(400).json({ error: 'Betting closed for this match.' });
-  if (!isAdmin && Date.now() >= new Date(match.kickoff_at).getTime()) {
+  if (match.result) return res.status(400).json({ error: 'Betting closed for this match.' });
+  if (Date.now() >= new Date(match.kickoff_at).getTime()) {
     return res.status(400).json({ error: 'Betting closed (kickoff passed).' });
   }
 
@@ -1618,17 +1615,6 @@ app.post('/api/bets', requireAuth, (req, res) => {
     payout: null,
     created_at: new Date().toISOString()
   });
-
-  const newBet = db.bets[db.bets.length - 1];
-  if (isAdmin && match.result) {
-    const settled = calculateBetSettlement(match, newBet);
-    if (!settled) {
-      return res.status(400).json({ error: 'Trận đã chốt nhưng thiếu tỷ số để tính payout ngay.' });
-    }
-    if (settled.payout > 0) user.points += settled.payout;
-    newBet.status = settled.status;
-    newBet.payout = settled.payout;
-  }
 
   saveDb();
   res.json({ ok: true, user: sanitizeUser(user) });
