@@ -9,6 +9,9 @@
     if (data.error === 'You already bet on this match.') {
       throw new Error('Bạn đã đặt cược trận này rồi.');
     }
+    if (data.error === 'Cannot edit odds after kickoff.') {
+      throw new Error('Trận đã tới giờ/đang diễn ra nên không thể sửa kèo.');
+    }
     if (data.error === 'You already bet this exact score.') {
       throw new Error('Bạn đã chọn tỷ số này rồi. Hãy chọn tỷ số khác.');
     }
@@ -1134,37 +1137,40 @@ async function renderAdminMatches() {
     const data = await adminApi('/api/admin/matches');
     const activeMatches = data.matches.filter((m) => !m.result);
     const settledMatches = data.matches.filter((m) => m.result);
-    const activeRows = activeMatches.map((m) => `
+    const activeRows = activeMatches.map((m) => {
+      const oddsLocked = Date.now() >= new Date(m.kickoff_at).getTime();
+      const oddsEditable = canManageOdds && !oddsLocked;
+      return `
       <tr>
         <td>${m.id}</td>
         <td>${m.team_a}</td>
         <td>${m.team_b}</td>
         <td>${fmtTime(m.kickoff_at)}</td>
         <td>
-          <select id="mode-${m.id}" ${canManageOdds ? '' : 'disabled'}>
+          <select id="mode-${m.id}" ${oddsEditable ? '' : 'disabled'}>
             <option value="1X2" ${m.bet_mode === '1X2' ? 'selected' : ''}>1X2</option>
             <option value="HANDICAP" ${m.bet_mode === 'HANDICAP' ? 'selected' : ''}>Kèo chấp</option>
             <option value="SCORE" ${m.bet_mode === 'SCORE' ? 'selected' : ''}>Tỷ số</option>
           </select>
         </td>
         <td>
-          <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_home : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_home : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="odds-draw-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_draw : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-draw-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_draw : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_away : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="odds-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === '1X2' ? m.odds_away : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
         </td>
         <td>
-          <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.bet_mode === 'HANDICAP' ? (m.handicap_line ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
-          <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_home ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
-          <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_away ?? '') : ''}" style="width:88px" ${canManageOdds ? '' : 'disabled'} />
-          <input id="score-odds-${m.id}" value="${m.bet_mode === 'SCORE' ? formatScoreOddsInput(m.score_odds) : ''}" placeholder="1-0=9.3, 2-0=8.9" style="width:220px" ${canManageOdds ? '' : 'disabled'} />
+          <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.bet_mode === 'HANDICAP' ? (m.handicap_line ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_home ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_away ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="score-odds-${m.id}" value="${m.bet_mode === 'SCORE' ? formatScoreOddsInput(m.score_odds) : ''}" placeholder="1-0=9.3, 2-0=8.9" style="width:220px" ${oddsEditable ? '' : 'disabled'} />
         </td>
-        <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
+        <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}${oddsLocked ? `<br><span class="small">Đã khóa sửa kèo</span>` : ''}</td>
         <td>
-          ${canManageOdds ? `<button onclick="updateOdds(${m.id})">Lưu kèo</button>` : ''}
+          ${canManageOdds ? `<button onclick="updateOdds(${m.id})" ${oddsLocked ? 'disabled' : ''}>Lưu kèo</button>` : ''}
           ${canSetResult ? `<button onclick="settleMatch(${m.id},'HOME')">Chốt ${m.team_a}</button>` : ''}
           ${canSetResult ? `<button onclick="settleMatch(${m.id},'DRAW')">Chốt Hòa</button>` : ''}
           ${canSetResult ? `<button onclick="settleMatch(${m.id},'AWAY')">Chốt ${m.team_b}</button>` : ''}
@@ -1176,7 +1182,8 @@ async function renderAdminMatches() {
           ${canDelete ? `<button onclick="deleteMatch(${m.id})">Xóa</button>` : ''}
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
     const settledRows = settledMatches.map((m) => `
       <tr>
         <td>${m.id}</td>

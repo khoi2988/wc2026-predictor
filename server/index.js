@@ -933,6 +933,10 @@ function getRegistrationState() {
   };
 }
 
+function hasMatchStarted(match) {
+  return Date.now() >= new Date(match.kickoff_at).getTime();
+}
+
 function currentUser(req) {
   applyDailyBonusToAllUsers();
   const user = getSessionUserRecord(req);
@@ -1803,6 +1807,18 @@ app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, re
   const match = db.matches.find((m) => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found.' });
 
+  const isOddsPayload = [
+    'oddsHome',
+    'oddsDraw',
+    'oddsAway',
+    'handicapLine',
+    'oddsHandicapHome',
+    'oddsHandicapAway'
+  ].some((key) => req.body[key] !== undefined);
+  if (isOddsPayload && !match.result && hasMatchStarted(match)) {
+    return res.status(400).json({ error: 'Cannot edit odds after kickoff.' });
+  }
+
   if (req.body.teamA !== undefined) match.team_a = canonicalTeamName(req.body.teamA);
   if (req.body.teamB !== undefined) match.team_b = canonicalTeamName(req.body.teamB);
   if (req.body.kickoffAt !== undefined) {
@@ -1976,6 +1992,7 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
   const match = db.matches.find((m) => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found.' });
   if (match.result) return res.status(400).json({ error: 'Cannot edit odds of settled match.' });
+  if (hasMatchStarted(match)) return res.status(400).json({ error: 'Cannot edit odds after kickoff.' });
 
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
