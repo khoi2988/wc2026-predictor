@@ -61,6 +61,7 @@
       <div class="card">
         <div class="tab-bar">
           <button class="tab-btn active" data-tab="openMatchesTab" id="tabOpenMatches">Các trận đang cho cược</button>
+          <button class="tab-btn" data-tab="overUnderMatchesTab" id="tabOverUnderMatches">Tài/Xỉu</button>
           <button class="tab-btn" data-tab="scoreMatchesTab" id="tabScoreMatches">Tỷ số chính xác</button>
           <button class="tab-btn" data-tab="closedMatchesTab" id="tabClosedMatches">Các trận đã đóng cược</button>
           <button class="tab-btn" data-tab="leaderboardTab" id="tabLeaderboard">Bảng xếp hạng</button>
@@ -71,6 +72,11 @@
         <div id="openMatchesTab" class="tab-panel active">
           <h2 id="openMatchesTitle">Các trận đang cho cược</h2>
           <div id="openMatches"></div>
+        </div>
+
+        <div id="overUnderMatchesTab" class="tab-panel hidden">
+          <h2 id="overUnderMatchesTitle">Cược tài/xỉu</h2>
+          <div id="overUnderMatches"></div>
         </div>
 
         <div id="scoreMatchesTab" class="tab-panel hidden">
@@ -144,6 +150,7 @@
           <select id="newBetMode">
             <option value="1X2">Thể thức 1X2</option>
             <option value="HANDICAP">Thể thức kèo chấp</option>
+            <option value="OVER_UNDER">Thể thức tài/xỉu</option>
             <option value="SCORE">Thể thức tỷ số chính xác</option>
           </select>
           <input id="newOddsHome" type="number" step="0.01" placeholder="Odds 1" />
@@ -152,6 +159,9 @@
           <input id="newHandicapLine" type="number" step="0.25" min="0" placeholder="Kèo chấp (vd 0.5)" />
           <input id="newOddsHandicapHome" type="number" step="0.01" min="1.01" placeholder="Odds chấp đội A (vd 1.95)" />
           <input id="newOddsHandicapAway" type="number" step="0.01" min="1.01" placeholder="Odds chấp đội B (vd 1.95)" />
+          <input id="newTotalLine" type="number" step="0.25" min="0.25" placeholder="Mốc tài/xỉu (vd 2.5)" />
+          <input id="newOddsOver" type="number" step="0.01" min="1.01" placeholder="Odds Tài" />
+          <input id="newOddsUnder" type="number" step="0.01" min="1.01" placeholder="Odds Xỉu" />
           <textarea id="newScoreOdds" rows="2" placeholder="Tỷ số: 1-0=9.3, 2-0=8.9, 2-1=7.9&#10;3-0=12, 3-1=12, 0-0=19, OTHER=25" style="min-width:320px"></textarea>
           <div id="newScoreTools" class="score-upload-tools">
             <input id="scoreOddsImage" type="file" accept="image/*" />
@@ -164,6 +174,7 @@
             <img id="scoreOddsPreview" class="score-upload-preview hidden" alt="Preview odds upload" />
             <div id="scoreOddsParsedPreview" class="score-parsed-preview hidden"></div>
           </div>
+          <div id="newBetModeHint" class="small" style="flex-basis:100%"></div>
           <button id="btnAddMatch">Thêm trận</button>
         </div>
         <div class="subtab-bar">

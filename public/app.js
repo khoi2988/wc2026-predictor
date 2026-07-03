@@ -58,6 +58,7 @@ const els = {
   me: document.getElementById('me'),
   msg: document.getElementById('msg'),
   openMatches: document.getElementById('openMatches'),
+  overUnderMatches: document.getElementById('overUnderMatches'),
   scoreMatches: document.getElementById('scoreMatches'),
   closedMatches: document.getElementById('closedMatches'),
   leaderboard: document.getElementById('leaderboard'),
@@ -100,6 +101,7 @@ let activeAdminMatchesTab = 'open';
 let maintenanceState = { enabled: false, can_access: true, message: '' };
 let registrationState = { enabled: true };
 let selectedOpenMatchDay = 'ALL';
+let selectedOverUnderMatchDay = 'ALL';
 let selectedScoreMatchDay = 'ALL';
 let selectedClosedMatchDay = 'ALL';
 
@@ -166,6 +168,7 @@ function syncNewMatchModeUI() {
   const mode = modeEl.value;
   const is1x2 = mode === '1X2';
   const isHandicap = mode === 'HANDICAP';
+  const isOverUnder = mode === 'OVER_UNDER';
   const isScore = mode === 'SCORE';
   setVisible(document.getElementById('newOddsHome'), is1x2);
   setVisible(document.getElementById('newOddsDraw'), is1x2);
@@ -173,8 +176,26 @@ function syncNewMatchModeUI() {
   setVisible(document.getElementById('newHandicapLine'), isHandicap);
   setVisible(document.getElementById('newOddsHandicapHome'), isHandicap);
   setVisible(document.getElementById('newOddsHandicapAway'), isHandicap);
+  setVisible(document.getElementById('newTotalLine'), isOverUnder);
+  setVisible(document.getElementById('newOddsOver'), isOverUnder);
+  setVisible(document.getElementById('newOddsUnder'), isOverUnder);
   setVisible(document.getElementById('newScoreOdds'), isScore);
   setVisible(document.getElementById('newScoreTools'), isScore);
+
+  const hintEl = document.getElementById('newBetModeHint');
+  if (hintEl) {
+    if (is1x2) {
+      hintEl.textContent = tr('newBetHint1x2', {}, 'Ví dụ 1X2: Odds 1 = 2.15, Odds X = 3.20, Odds 2 = 3.40');
+    } else if (isHandicap) {
+      hintEl.textContent = tr('newBetHintHandicap', {}, 'Ví dụ kèo chấp: Mốc chấp = 0.5, Odds chấp đội A = 1.95, Odds chấp đội B = 1.95');
+    } else if (isOverUnder) {
+      hintEl.textContent = tr('newBetHintOverUnder', {}, 'Ví dụ tài/xỉu: Mốc tài/xỉu = 2.5, Odds Tài = 1.95, Odds Xỉu = 1.95');
+    } else if (isScore) {
+      hintEl.textContent = tr('newBetHintScore', {}, 'Ví dụ tỷ số chính xác: 1-0=9.3, 2-0=8.9, 2-1=7.9, OTHER=25');
+    } else {
+      hintEl.textContent = '';
+    }
+  }
 }
 
 function syncRowModeUI(matchId) {
@@ -182,8 +203,10 @@ function syncRowModeUI(matchId) {
   if (!modeEl) return;
   const is1x2 = modeEl.value === '1X2';
   const isHandicap = modeEl.value === 'HANDICAP';
+  const isOverUnder = modeEl.value === 'OVER_UNDER';
   const ids1x2 = [`odds-home-${matchId}`, `odds-draw-${matchId}`, `odds-away-${matchId}`];
   const idsHcp = [`hcp-line-${matchId}`, `hcp-home-${matchId}`, `hcp-away-${matchId}`];
+  const idsOu = [`ou-line-${matchId}`, `ou-over-${matchId}`, `ou-under-${matchId}`];
   const idsScore = [`score-odds-${matchId}`];
   for (const id of ids1x2) {
     const el = document.getElementById(id);
@@ -192,6 +215,10 @@ function syncRowModeUI(matchId) {
   for (const id of idsHcp) {
     const el = document.getElementById(id);
     if (el) el.disabled = !isHandicap;
+  }
+  for (const id of idsOu) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !isOverUnder;
   }
   for (const id of idsScore) {
     const el = document.getElementById(id);
@@ -265,10 +292,26 @@ function renderMatchDayTabs(matches, selectedDay, clickHandlerName) {
   const days = [...new Set(matches.map((m) => matchDayKey(m.kickoff_at)))];
   if (!days.length) return '';
   const buttons = [
-    `<button type="button" class="subtab-btn ${selectedDay === 'ALL' ? 'active' : ''}" onclick="${clickHandlerName}('ALL')">Tất cả</button>`,
+    `<button type="button" class="subtab-btn ${selectedDay === 'ALL' ? 'active' : ''}" onclick="${clickHandlerName}('ALL')">${tr('allDaysTab', {}, 'Tất cả')}</button>`,
     ...days.map((day) => `<button type="button" class="subtab-btn ${selectedDay === day ? 'active' : ''}" onclick="${clickHandlerName}('${day}')">${matchDayLabel(day)}</button>`)
   ];
   return `<div class="subtab-bar match-day-tabs">${buttons.join('')}</div>`;
+}
+
+function getMatchTableHeaderLabels(matches) {
+  const modes = [...new Set((matches || []).map((m) => String(m.bet_mode || '1X2')))];
+  if (modes.length === 1) {
+    if (modes[0] === '1X2') {
+      return [tr('tableOdds1', {}, 'Kèo 1 (đội nhà)'), tr('tableOddsX', {}, 'Kèo X (hòa)'), tr('tableOdds2', {}, 'Kèo 2 (đội khách)')];
+    }
+    if (modes[0] === 'HANDICAP') {
+      return [tr('tableHandicapHome', {}, 'Cửa đội A'), tr('tableHandicapLine', {}, 'Mốc chấp'), tr('tableHandicapAway', {}, 'Cửa đội B')];
+    }
+    if (modes[0] === 'OVER_UNDER') {
+      return [tr('tableOver', {}, 'Cửa Tài'), tr('tableTotalLine', {}, 'Mốc tài/xỉu'), tr('tableUnder', {}, 'Cửa Xỉu')];
+    }
+  }
+  return [tr('tableOptionA', {}, 'Lựa chọn A'), tr('tableOptionMid', {}, 'Mốc / cửa giữa'), tr('tableOptionB', {}, 'Lựa chọn B')];
 }
 
 function filterMatchesByDay(matches, selectedDay) {
@@ -303,7 +346,7 @@ function sortScoreOddsEntries(scoreOdds) {
 }
 
 function scorePickLabel(score) {
-  return score === 'OTHER' ? 'Tỷ số khác' : score;
+  return score === 'OTHER' ? tr('otherScoresLabel', {}, 'Tỷ số khác') : score;
 }
 
 function normalizeOcrScoreToken(token) {
@@ -921,6 +964,8 @@ function matchLabel(teamA, teamB) {
 function pickLabel(pick) {
   if (pick === 'HOME') return tr('pickHomeWin', {}, 'Đội nhà thắng');
   if (pick === 'DRAW') return tr('pickDraw', {}, 'Hòa');
+  if (pick === 'OVER') return tr('pickOver', {}, 'Tài');
+  if (pick === 'UNDER') return tr('pickUnder', {}, 'Xỉu');
   return tr('pickAwayWin', {}, 'Đội khách thắng');
 }
 
@@ -941,6 +986,7 @@ function betMatchResultText(bet) {
 
 function marketLabel(market, line) {
   if (market === 'HANDICAP') return tr('marketHandicap', { line: line ?? 0 }, `Kèo chấp (${line ?? 0})`);
+  if (market === 'OVER_UNDER') return tr('marketOverUnder', { line: line ?? 0 }, `Tài/Xỉu (${line ?? 0})`);
   if (market === 'SCORE') return tr('marketScore', {}, 'Tỷ số chính xác');
   return tr('market1x2', {}, '1X2');
 }
@@ -958,6 +1004,10 @@ function betPickText(bet) {
   if (bet.market === 'HANDICAP') {
     if (bet.pick === 'HOME') return `${bet.team_a} -${bet.handicap_line ?? 0}`;
     if (bet.pick === 'AWAY') return `${bet.team_b} +${bet.handicap_line ?? 0}`;
+  }
+  if (bet.market === 'OVER_UNDER') {
+    if (bet.pick === 'OVER') return tr('overLabel', { line: bet.total_line ?? 0 }, `Tài ${bet.total_line ?? 0}`);
+    if (bet.pick === 'UNDER') return tr('underLabel', { line: bet.total_line ?? 0 }, `Xỉu ${bet.total_line ?? 0}`);
   }
   if (bet.market === 'SCORE') return scorePickLabel(bet.pick);
   if (bet.pick === 'HOME') return tr('betPickWin', { team: bet.team_a }, `${bet.team_a} thắng`);
@@ -1150,6 +1200,7 @@ async function renderAdminMatches() {
           <select id="mode-${m.id}" ${oddsEditable ? '' : 'disabled'}>
             <option value="1X2" ${m.bet_mode === '1X2' ? 'selected' : ''}>1X2</option>
             <option value="HANDICAP" ${m.bet_mode === 'HANDICAP' ? 'selected' : ''}>Kèo chấp</option>
+            <option value="OVER_UNDER" ${m.bet_mode === 'OVER_UNDER' ? 'selected' : ''}>Tài/Xỉu</option>
             <option value="SCORE" ${m.bet_mode === 'SCORE' ? 'selected' : ''}>Tỷ số</option>
           </select>
         </td>
@@ -1166,6 +1217,9 @@ async function renderAdminMatches() {
           <input id="hcp-line-${m.id}" type="number" step="0.25" min="0" value="${m.bet_mode === 'HANDICAP' ? (m.handicap_line ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
           <input id="hcp-home-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_home ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
           <input id="hcp-away-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'HANDICAP' ? (m.odds_handicap_away ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="ou-line-${m.id}" type="number" step="0.25" min="0.25" value="${m.bet_mode === 'OVER_UNDER' ? (m.total_line ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="ou-over-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'OVER_UNDER' ? (m.odds_over ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
+          <input id="ou-under-${m.id}" type="number" step="0.01" min="1.01" value="${m.bet_mode === 'OVER_UNDER' ? (m.odds_under ?? '') : ''}" style="width:88px" ${oddsEditable ? '' : 'disabled'} />
           <input id="score-odds-${m.id}" value="${m.bet_mode === 'SCORE' ? formatScoreOddsInput(m.score_odds) : ''}" placeholder="1-0=9.3, 2-0=8.9" style="width:220px" ${oddsEditable ? '' : 'disabled'} />
         </td>
         <td>${m.result || '-'}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}${oddsLocked ? `<br><span class="small">Đã khóa sửa kèo</span>` : ''}</td>
@@ -1190,7 +1244,7 @@ async function renderAdminMatches() {
         <td>${m.team_a}</td>
         <td>${m.team_b}</td>
         <td>${fmtTime(m.kickoff_at)}</td>
-        <td>${marketLabel(m.bet_mode, m.handicap_line)}</td>
+        <td>${marketLabel(m.bet_mode, m.total_line ?? m.handicap_line)}</td>
         <td>${matchResultText(m)}${Number.isInteger(m.home_score) && Number.isInteger(m.away_score) ? `<br><span class="small">${m.home_score}-${m.away_score}</span>` : ''}</td>
         <td>
           ${canSetResult ? `<button onclick="exportMatchSettlement(${m.id})">Export kết quả</button>` : ''}
@@ -1368,7 +1422,7 @@ async function renderMatches() {
     const availableScoreEntries = scoreEntries.filter(([score]) => !myScorePicks.has(score));
     const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : scoreEntries;
     const openStatus = scoreBetCount > 0
-      ? `Đã đặt ${scoreBetCount}/3`
+      ? tr('scoreAlreadyBetCount', { count: scoreBetCount }, `Đã đặt ${scoreBetCount}/3`)
       : tr('matchNotYetBet', {}, 'Chưa đặt cược');
     return `
       <div class="score-match-card">
@@ -1397,8 +1451,10 @@ async function renderMatches() {
           <input id="score-stake-${m.id}" type="number" min="1" value="100" ${reachedScoreLimit ? 'disabled' : ''} />
           <button class="bet-action" onclick="placeBet(${m.id}, 'SCORE')" ${reachedScoreLimit ? 'disabled' : ''}>${tr('betAction', {}, 'Đặt')}</button>
           <div class="small bet-meta">
-            ${scoreBetCount ? `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.` : 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.'}
-            ${myScoreBets.length ? `<br>Đã chọn: ${myScoreBets.map((bet) => `${scorePickLabel(bet.pick)} (${bet.odds})`).join(', ')}` : ''}
+            ${scoreBetCount
+              ? tr('scoreBetHolding', { count: scoreBetCount }, `Bạn đang giữ ${scoreBetCount}/3 vé tỷ số.`)
+              : tr('scoreBetLimitHint', {}, 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.')}
+            ${myScoreBets.length ? `<br>${tr('scoreChosenLabel', {}, 'Đã chọn')}: ${myScoreBets.map((bet) => `${scorePickLabel(bet.pick)} (${bet.odds})`).join(', ')}` : ''}
           </div>
         </div>
       </div>
@@ -1428,11 +1484,20 @@ async function renderMatches() {
     const odds2Cell = mode === '1X2'
       ? `<div class="odds-block"><div>${tr('odds2Text', { team: teamLabel(m.team_b) }, `Kèo 2: ${teamLabel(m.team_b)} thắng`)}</div><span class="small">${tr('oddsRate', { value: m.odds_away }, `Tỷ lệ: ${m.odds_away}`)}</span></div>`
       : '<span class="small">-</span>';
+    const overCell = mode === 'OVER_UNDER'
+      ? `<div class="odds-block"><div>${tr('overLabel', { line: m.total_line }, `Tài ${m.total_line}`)}</div><span class="small">${tr('oddsRate', { value: m.odds_over }, `Tỷ lệ: ${m.odds_over}`)}</span></div>`
+      : '<span class="small">-</span>';
+    const totalCell = mode === 'OVER_UNDER'
+      ? `<div class="odds-block"><div>${tr('totalLineLabel', {}, 'Mốc')}</div><span class="small">${m.total_line}</span></div>`
+      : '<span class="small">-</span>';
+    const underCell = mode === 'OVER_UNDER'
+      ? `<div class="odds-block"><div>${tr('underLabel', { line: m.total_line }, `Xỉu ${m.total_line}`)}</div><span class="small">${tr('oddsRate', { value: m.odds_under }, `Tỷ lệ: ${m.odds_under}`)}</span></div>`
+      : '<span class="small">-</span>';
     const scoreEntries = sortScoreOddsEntries(m.score_odds || {});
     const availableScoreEntries = scoreEntries.filter(([score]) => !myScorePicks.has(score));
     const selectableScoreEntries = availableScoreEntries.length ? availableScoreEntries : scoreEntries;
     const scoreCell = mode === 'SCORE'
-      ? `<div class="odds-block"><div>Tỷ số mở cược</div><span class="small">${scoreOddsSummary(m.score_odds)}</span></div>`
+      ? `<div class="odds-block"><div>${tr('scoreBettingOpenLabel', {}, 'Tỷ số mở cược')}</div><span class="small">${scoreOddsSummary(m.score_odds)}</span></div>`
       : '';
 
     return `
@@ -1441,9 +1506,9 @@ async function renderMatches() {
           <div class="match-title">${matchLabel(m.team_a, m.team_b)}</div>
           <div class="small match-kickoff">${fmtTime(m.kickoff_at)}</div>
         </td>
-        <td>${odds1Cell}</td>
-        <td>${oddsXCell}</td>
-        <td>${mode === 'SCORE' ? scoreCell : odds2Cell}</td>
+        <td>${mode === 'OVER_UNDER' ? overCell : odds1Cell}</td>
+        <td>${mode === 'OVER_UNDER' ? totalCell : oddsXCell}</td>
+        <td>${mode === 'SCORE' ? scoreCell : (mode === 'OVER_UNDER' ? underCell : odds2Cell)}</td>
         <td>
           ${closed
             ? `<span class="status-pill status-closed">${result}</span>`
@@ -1464,8 +1529,21 @@ async function renderMatches() {
                 </div>
                 <button class="bet-action" onclick="placeBet(${m.id}, 'HANDICAP')">${tr('betAction', {}, 'Đặt')}</button>
               </div>
+            ` : mode === 'OVER_UNDER' ? `
+              <div class="bet-box">
+                <div class="small bet-mode">${tr('betModeLabelOverUnder', {}, 'Thể thức: Tài/Xỉu')}</div>
+                <div class="small bet-meta">${tr('overUnderMeta', { line: m.total_line, over: m.odds_over, under: m.odds_under }, `Mốc ${m.total_line} | Tài (${m.odds_over}) | Xỉu (${m.odds_under})`)}</div>
+                <div class="bet-controls">
+                  <select id="ou-pick-${m.id}">
+                    <option value="OVER">${tr('overLabel', { line: m.total_line }, `Tài ${m.total_line}`)}</option>
+                    <option value="UNDER">${tr('underLabel', { line: m.total_line }, `Xỉu ${m.total_line}`)}</option>
+                  </select>
+                  <input id="ou-stake-${m.id}" type="number" min="1" value="100" />
+                </div>
+                <button class="bet-action" onclick="placeBet(${m.id}, 'OVER_UNDER')">${tr('betAction', {}, 'Đặt')}</button>
+              </div>
             ` : mode === 'SCORE' ? `
-              <div class="bet-box closed"><span class="small">${closed ? tr('statusClosedBetting', {}, 'Đã đóng cược') : 'Qua tab Tỷ số chính xác để đặt cược.'}</span></div>
+              <div class="bet-box closed"><span class="small">${closed ? tr('statusClosedBetting', {}, 'Đã đóng cược') : tr('scoreTabHint', {}, 'Qua tab Tỷ số chính xác để đặt cược.')}</span></div>
             ` : `
               <div class="bet-box">
                 <div class="small bet-mode">${tr('betModeLabel1x2', {}, 'Thể thức: 1X2')}</div>
@@ -1487,7 +1565,9 @@ async function renderMatches() {
   };
 
   const openMatches = data.matches
-    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && String(m.bet_mode || '1X2') !== 'SCORE');
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && !['SCORE', 'OVER_UNDER'].includes(String(m.bet_mode || '1X2')));
+  const overUnderMatches = data.matches
+    .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && String(m.bet_mode || '1X2') === 'OVER_UNDER');
   const scoreMatches = data.matches
     .filter((m) => Date.now() < new Date(m.kickoff_at).getTime() && !m.result && String(m.bet_mode || '1X2') === 'SCORE');
   const closedMatches = data.matches
@@ -1495,6 +1575,9 @@ async function renderMatches() {
 
   if (selectedOpenMatchDay !== 'ALL' && !openMatches.some((m) => matchDayKey(m.kickoff_at) === selectedOpenMatchDay)) {
     selectedOpenMatchDay = 'ALL';
+  }
+  if (selectedOverUnderMatchDay !== 'ALL' && !overUnderMatches.some((m) => matchDayKey(m.kickoff_at) === selectedOverUnderMatchDay)) {
+    selectedOverUnderMatchDay = 'ALL';
   }
   if (selectedScoreMatchDay !== 'ALL' && !scoreMatches.some((m) => matchDayKey(m.kickoff_at) === selectedScoreMatchDay)) {
     selectedScoreMatchDay = 'ALL';
@@ -1504,10 +1587,17 @@ async function renderMatches() {
   }
 
   const filteredOpenMatches = filterMatchesByDay(openMatches, selectedOpenMatchDay);
+  const filteredOverUnderMatches = filterMatchesByDay(overUnderMatches, selectedOverUnderMatchDay);
   const filteredScoreMatches = filterMatchesByDay(scoreMatches, selectedScoreMatchDay);
   const filteredClosedMatches = filterMatchesByDay(closedMatches, selectedClosedMatchDay);
+  const [openHeaderA, openHeaderB, openHeaderC] = getMatchTableHeaderLabels(filteredOpenMatches.length ? filteredOpenMatches : openMatches);
+  const [overUnderHeaderA, overUnderHeaderB, overUnderHeaderC] = getMatchTableHeaderLabels(filteredOverUnderMatches.length ? filteredOverUnderMatches : overUnderMatches);
+  const [closedHeaderA, closedHeaderB, closedHeaderC] = getMatchTableHeaderLabels(filteredClosedMatches.length ? filteredClosedMatches : closedMatches);
 
   const openRows = filteredOpenMatches
+    .map((m) => buildRow(m, false))
+    .join('');
+  const overUnderRows = filteredOverUnderMatches
     .map((m) => buildRow(m, false))
     .join('');
   const scoreRows = filteredScoreMatches
@@ -1520,20 +1610,28 @@ async function renderMatches() {
   els.openMatches.innerHTML = `
     ${renderMatchDayTabs(openMatches, selectedOpenMatchDay, 'setOpenMatchDay')}
     <table class="matches-table">
-      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
+      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${openHeaderA}</th><th>${openHeaderB}</th><th>${openHeaderC}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
       <tbody>${openRows || `<tr><td colspan="6" class="small">${tr('openMatchesEmpty', {}, 'Hiện chưa có trận nào mở cược.')}</td></tr>`}</tbody>
+    </table>
+  `;
+
+  els.overUnderMatches.innerHTML = `
+    ${renderMatchDayTabs(overUnderMatches, selectedOverUnderMatchDay, 'setOverUnderMatchDay')}
+    <table class="matches-table">
+      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${overUnderHeaderA}</th><th>${overUnderHeaderB}</th><th>${overUnderHeaderC}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
+      <tbody>${overUnderRows || `<tr><td colspan="6" class="small">${tr('overUnderMatchesEmpty', {}, 'Hiện chưa có trận nào mở cược tài/xỉu.')}</td></tr>`}</tbody>
     </table>
   `;
 
   els.scoreMatches.innerHTML = `
     ${renderMatchDayTabs(scoreMatches, selectedScoreMatchDay, 'setScoreMatchDay')}
-    <div class="score-matches-grid">${scoreRows || `<p class="small">Hiện chưa có trận nào mở cược tỷ số chính xác.</p>`}</div>
+    <div class="score-matches-grid">${scoreRows || `<p class="small">${tr('scoreMatchesEmpty', {}, 'Hiện chưa có trận nào mở cược tỷ số chính xác.')}</p>`}</div>
   `;
 
   els.closedMatches.innerHTML = `
     ${renderMatchDayTabs(closedMatches, selectedClosedMatchDay, 'setClosedMatchDay')}
     <table class="matches-table">
-      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${tr('tableOdds1', {}, 'Kèo 1 (đội nhà)')}</th><th>${tr('tableOddsX', {}, 'Kèo X (hòa)')}</th><th>${tr('tableOdds2', {}, 'Kèo 2 (đội khách)')}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
+      <thead><tr><th>${tr('tableMatch', {}, 'Trận')}</th><th>${closedHeaderA}</th><th>${closedHeaderB}</th><th>${closedHeaderC}</th><th>${tr('tableStatus', {}, 'Trạng thái')}</th><th>${tr('tableBet', {}, 'Đặt cược')}</th></tr></thead>
       <tbody>${closedRows || `<tr><td colspan="6" class="small">${tr('closedMatchesEmpty', {}, 'Chưa có trận nào đóng cược.')}</td></tr>`}</tbody>
     </table>
   `;
@@ -1541,6 +1639,11 @@ async function renderMatches() {
 
 window.setOpenMatchDay = function (day) {
   selectedOpenMatchDay = day;
+  renderMatches().catch((e) => setMessage(e.message, 'error'));
+};
+
+window.setOverUnderMatchDay = function (day) {
+  selectedOverUnderMatchDay = day;
   renderMatches().catch((e) => setMessage(e.message, 'error'));
 };
 
@@ -1577,7 +1680,7 @@ async function renderMyBets() {
         ${b.team_a || '-'} vs ${b.team_b || '-'}
         <br><span class="small">#${b.match_id} / bet #${b.id}</span>
       </td>
-      <td>${marketLabel(b.market, b.handicap_line)}</td>
+      <td>${marketLabel(b.market, b.total_line ?? b.handicap_line)}</td>
       <td>${betPickText(b)}</td>
       <td>${b.stake}</td>
       <td>${b.odds}</td>
@@ -1605,16 +1708,22 @@ window.placeBet = async function (matchId, market = '1X2') {
     }
     const pick = market === 'HANDICAP'
       ? document.getElementById(`hcp-pick-${matchId}`).value
+      : market === 'OVER_UNDER'
+        ? document.getElementById(`ou-pick-${matchId}`).value
       : market === 'SCORE'
         ? document.getElementById(`score-pick-${matchId}`).value
         : document.getElementById(`pick-${matchId}`).value;
     const stake = Number(market === 'HANDICAP'
       ? document.getElementById(`hcp-stake-${matchId}`).value
+      : market === 'OVER_UNDER'
+        ? document.getElementById(`ou-stake-${matchId}`).value
       : market === 'SCORE'
         ? document.getElementById(`score-stake-${matchId}`).value
         : document.getElementById(`stake-${matchId}`).value);
     const odds = market === 'HANDICAP'
       ? (pick === 'HOME' ? match.odds_handicap_home : match.odds_handicap_away)
+      : market === 'OVER_UNDER'
+        ? (pick === 'OVER' ? match.odds_over : match.odds_under)
       : market === 'SCORE'
         ? Number((match.score_odds || {})[pick])
         : (pick === 'HOME' ? match.odds_home : (pick === 'DRAW' ? match.odds_draw : match.odds_away));
@@ -1622,6 +1731,7 @@ window.placeBet = async function (matchId, market = '1X2') {
       market,
       pick,
       handicap_line: match.handicap_line,
+      total_line: match.total_line,
       team_a: match.team_a,
       team_b: match.team_b
     });
@@ -1631,7 +1741,7 @@ window.placeBet = async function (matchId, market = '1X2') {
       pick,
       stake,
       odds,
-      handicapLine: match.handicap_line,
+      handicapLine: market === 'OVER_UNDER' ? match.total_line : match.handicap_line,
       teamA: match.team_a,
       teamB: match.team_b,
       pickText
@@ -1876,11 +1986,17 @@ document.getElementById('btnAddMatch').onclick = async () => {
     const handicapLineRaw = document.getElementById('newHandicapLine').value;
     const oddsHandicapHomeRaw = document.getElementById('newOddsHandicapHome').value;
     const oddsHandicapAwayRaw = document.getElementById('newOddsHandicapAway').value;
+    const totalLineRaw = document.getElementById('newTotalLine').value;
+    const oddsOverRaw = document.getElementById('newOddsOver').value;
+    const oddsUnderRaw = document.getElementById('newOddsUnder').value;
     const scoreOdds = document.getElementById('newScoreOdds').value.trim();
     const kickoffAt = new Date(kickoffLocal).toISOString();
     const handicapLine = handicapLineRaw === '' ? null : Number(handicapLineRaw);
     const oddsHandicapHome = oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw);
     const oddsHandicapAway = oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw);
+    const totalLine = totalLineRaw === '' ? null : Number(totalLineRaw);
+    const oddsOver = oddsOverRaw === '' ? null : Number(oddsOverRaw);
+    const oddsUnder = oddsUnderRaw === '' ? null : Number(oddsUnderRaw);
 
     if (betMode === 'HANDICAP') {
       if (handicapLine === null || Number.isNaN(handicapLine) || handicapLine < 0) {
@@ -1896,6 +2012,16 @@ document.getElementById('btnAddMatch').onclick = async () => {
       setMessage('Vui lòng nhập odds tỷ số. Ví dụ: 1-0=9.3, 2-0=8.9', 'error');
       return;
     }
+    if (betMode === 'OVER_UNDER') {
+      if (totalLine === null || Number.isNaN(totalLine) || totalLine <= 0) {
+        setMessage('Mốc tài/xỉu không hợp lệ. Ví dụ: 2.5', 'error');
+        return;
+      }
+      if (oddsOver === null || oddsUnder === null || oddsOver <= 1 || oddsUnder <= 1) {
+        setMessage('Odds tài/xỉu phải lớn hơn 1. Ví dụ: 1.95 và 1.95', 'error');
+        return;
+      }
+    }
 
     await adminApi('/api/admin/matches', {
       method: 'POST',
@@ -1905,6 +2031,9 @@ document.getElementById('btnAddMatch').onclick = async () => {
         handicapLine,
         oddsHandicapHome,
         oddsHandicapAway,
+        totalLine,
+        oddsOver,
+        oddsUnder,
         scoreOdds
       })
     });
@@ -2106,6 +2235,9 @@ window.updateOdds = async function (matchId) {
     const handicapLineRaw = document.getElementById(`hcp-line-${matchId}`).value;
     const oddsHandicapHomeRaw = document.getElementById(`hcp-home-${matchId}`).value;
     const oddsHandicapAwayRaw = document.getElementById(`hcp-away-${matchId}`).value;
+    const totalLineRaw = document.getElementById(`ou-line-${matchId}`).value;
+    const oddsOverRaw = document.getElementById(`ou-over-${matchId}`).value;
+    const oddsUnderRaw = document.getElementById(`ou-under-${matchId}`).value;
     const scoreOdds = document.getElementById(`score-odds-${matchId}`).value.trim();
     await adminApi(`/api/admin/matches/${matchId}/odds`, {
       method: 'PUT',
@@ -2115,6 +2247,9 @@ window.updateOdds = async function (matchId) {
         handicapLine: handicapLineRaw === '' ? null : Number(handicapLineRaw),
         oddsHandicapHome: oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw),
         oddsHandicapAway: oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw),
+        totalLine: totalLineRaw === '' ? null : Number(totalLineRaw),
+        oddsOver: oddsOverRaw === '' ? null : Number(oddsOverRaw),
+        oddsUnder: oddsUnderRaw === '' ? null : Number(oddsUnderRaw),
         scoreOdds
       })
     });

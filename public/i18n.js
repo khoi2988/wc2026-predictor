@@ -16,11 +16,15 @@
       registerHint: 'Đã có tài khoản?',
       loginLink: 'Đăng nhập',
       tabOpenMatches: 'Các trận đang cho cược',
+      tabOverUnderMatches: 'Tài/Xỉu',
+      tabScoreMatches: 'Tỷ số chính xác',
       tabClosedMatches: 'Các trận đã đóng cược',
       tabLeaderboard: 'Bảng xếp hạng',
       tabMyBets: 'Lịch sử cược',
       tabSpecials: 'Dự đoán vui',
       openMatchesTitle: 'Các trận đang cho cược',
+      overUnderMatchesTitle: 'Cược tài/xỉu',
+      scoreMatchesTitle: 'Cược tỷ số chính xác',
       closedMatchesTitle: 'Các trận đã đóng cược',
       leaderboardTitle: 'Bảng xếp hạng',
       myBetsTitle: 'Cược của tôi',
@@ -61,11 +65,21 @@
       pointsLabel: 'điểm',
       placeholderNewBetMode1: 'Thể thức 1X2',
       placeholderNewBetMode2: 'Thể thức kèo chấp',
+      placeholderNewBetMode3: 'Thể thức tài/xỉu',
+      placeholderNewBetMode4: 'Thể thức tỷ số chính xác',
+      newBetHint1x2: 'Ví dụ 1X2: Odds 1 = 2.15, Odds X = 3.20, Odds 2 = 3.40',
+      newBetHintHandicap: 'Ví dụ kèo chấp: Mốc chấp = 0.5, Odds chấp đội A = 1.95, Odds chấp đội B = 1.95',
+      newBetHintOverUnder: 'Ví dụ tài/xỉu: Mốc tài/xỉu = 2.5, Odds Tài = 1.95, Odds Xỉu = 1.95',
+      newBetHintScore: 'Ví dụ tỷ số chính xác: 1-0=9.3, 2-0=8.9, 2-1=7.9, OTHER=25',
       pickHomeWin: 'Đội nhà thắng',
       pickAwayWin: 'Đội khách thắng',
       pickDraw: 'Hòa',
+      pickOver: 'Tài',
+      pickUnder: 'Xỉu',
       market1x2: '1X2',
       marketHandicap: 'Kèo chấp ({line})',
+      marketOverUnder: 'Tài/Xỉu ({line})',
+      marketScore: 'Tỷ số chính xác',
       betStatusWon: 'Thắng',
       betStatusLost: 'Thua',
       betStatusRefund: 'Hoàn tiền',
@@ -90,14 +104,32 @@
       statusClosedBetting: 'Đã đóng cược',
       betModeLabel1x2: 'Thể thức: 1X2',
       betModeLabelHandicap: 'Thể thức: Kèo chấp',
+      betModeLabelOverUnder: 'Thể thức: Tài/Xỉu',
+      overLabel: 'Tài {line}',
+      underLabel: 'Xỉu {line}',
+      totalLineLabel: 'Mốc',
+      overUnderMeta: 'Mốc {line} | Tài ({over}) | Xỉu ({under})',
+      scoreBettingOpenLabel: 'Tỷ số mở cược',
       betAction: 'Đặt',
+      allDaysTab: 'Tất cả',
       tableMatch: 'Trận',
       tableOdds1: 'Kèo 1 (đội nhà)',
       tableOddsX: 'Kèo X (hòa)',
       tableOdds2: 'Kèo 2 (đội khách)',
+      tableHandicapHome: 'Cửa đội A',
+      tableHandicapLine: 'Mốc chấp',
+      tableHandicapAway: 'Cửa đội B',
+      tableOver: 'Cửa Tài',
+      tableTotalLine: 'Mốc tài/xỉu',
+      tableUnder: 'Cửa Xỉu',
+      tableOptionA: 'Lựa chọn A',
+      tableOptionMid: 'Mốc / cửa giữa',
+      tableOptionB: 'Lựa chọn B',
       tableStatus: 'Trạng thái',
       tableBet: 'Đặt cược',
       openMatchesEmpty: 'Hiện chưa có trận nào mở cược.',
+      overUnderMatchesEmpty: 'Hiện chưa có trận nào mở cược tài/xỉu.',
+      scoreMatchesEmpty: 'Hiện chưa có trận nào mở cược tỷ số chính xác.',
       closedMatchesEmpty: 'Chưa có trận nào đóng cược.',
       leaderboardRank: 'Rank',
       leaderboardUser: 'User',
@@ -111,7 +143,15 @@
       myBetsResult: 'KQ',
       myBetsPayout: 'Thưởng',
       myBetsAction: 'Hành động',
-      cancelBet: 'Hủy'
+      cancelBet: 'Hủy',
+      matchAlreadyBet: 'Đã đặt cược',
+      matchNotYetBet: 'Chưa đặt cược',
+      otherScoresLabel: 'Tỷ số khác',
+      scoreAlreadyBetCount: 'Đã đặt {count}/3',
+      scoreBetHolding: 'Bạn đang giữ {count}/3 vé tỷ số.',
+      scoreBetLimitHint: 'Bạn có thể đặt tối đa 3 tỷ số cho trận này.',
+      scoreChosenLabel: 'Đã chọn',
+      scoreTabHint: 'Qua tab Tỷ số chính xác để đặt cược.'
     },
     en: {
       pageTitle: 'World Cup 2026 Predictor LAN',
@@ -127,11 +167,15 @@
       registerHint: 'Already have an account?',
       loginLink: 'Login',
       tabOpenMatches: 'Open for betting',
+      tabOverUnderMatches: 'Over/Under',
+      tabScoreMatches: 'Exact score',
       tabClosedMatches: 'Closed matches',
       tabLeaderboard: 'Leaderboard',
       tabMyBets: 'Bet history',
       tabSpecials: 'Fun predictions',
       openMatchesTitle: 'Open for betting',
+      overUnderMatchesTitle: 'Over/Under bets',
+      scoreMatchesTitle: 'Exact score bets',
       closedMatchesTitle: 'Closed matches',
       leaderboardTitle: 'Leaderboard',
       myBetsTitle: 'My bets',
@@ -172,11 +216,21 @@
       pointsLabel: 'points',
       placeholderNewBetMode1: '1X2 mode',
       placeholderNewBetMode2: 'Handicap mode',
+      placeholderNewBetMode3: 'Over/Under mode',
+      placeholderNewBetMode4: 'Exact score mode',
+      newBetHint1x2: 'Example 1X2: Odds 1 = 2.15, Odds X = 3.20, Odds 2 = 3.40',
+      newBetHintHandicap: 'Example handicap: line = 0.5, Team A odds = 1.95, Team B odds = 1.95',
+      newBetHintOverUnder: 'Example over/under: total line = 2.5, Over odds = 1.95, Under odds = 1.95',
+      newBetHintScore: 'Example exact score: 1-0=9.3, 2-0=8.9, 2-1=7.9, OTHER=25',
       pickHomeWin: 'Home team wins',
       pickAwayWin: 'Away team wins',
       pickDraw: 'Draw',
+      pickOver: 'Over',
+      pickUnder: 'Under',
       market1x2: '1X2',
       marketHandicap: 'Handicap ({line})',
+      marketOverUnder: 'Over/Under ({line})',
+      marketScore: 'Exact score',
       betStatusWon: 'Won',
       betStatusLost: 'Lost',
       betStatusRefund: 'Refund',
@@ -201,14 +255,32 @@
       statusClosedBetting: 'Betting closed',
       betModeLabel1x2: 'Mode: 1X2',
       betModeLabelHandicap: 'Mode: Handicap',
+      betModeLabelOverUnder: 'Mode: Over/Under',
+      overLabel: 'Over {line}',
+      underLabel: 'Under {line}',
+      totalLineLabel: 'Line',
+      overUnderMeta: 'Line {line} | Over ({over}) | Under ({under})',
+      scoreBettingOpenLabel: 'Exact score odds',
       betAction: 'Bet',
+      allDaysTab: 'All',
       tableMatch: 'Match',
       tableOdds1: '1 (home)',
       tableOddsX: 'X (draw)',
       tableOdds2: '2 (away)',
+      tableHandicapHome: 'Home side',
+      tableHandicapLine: 'Handicap line',
+      tableHandicapAway: 'Away side',
+      tableOver: 'Over side',
+      tableTotalLine: 'Total line',
+      tableUnder: 'Under side',
+      tableOptionA: 'Option A',
+      tableOptionMid: 'Line / middle',
+      tableOptionB: 'Option B',
       tableStatus: 'Status',
       tableBet: 'Bet',
       openMatchesEmpty: 'There are no matches currently open for betting.',
+      overUnderMatchesEmpty: 'There are no over/under matches currently open.',
+      scoreMatchesEmpty: 'There are no exact score matches currently open.',
       closedMatchesEmpty: 'There are no closed matches yet.',
       leaderboardRank: 'Rank',
       leaderboardUser: 'User',
@@ -222,7 +294,15 @@
       myBetsResult: 'Result',
       myBetsPayout: 'Payout',
       myBetsAction: 'Action',
-      cancelBet: 'Cancel'
+      cancelBet: 'Cancel',
+      matchAlreadyBet: 'Already placed',
+      matchNotYetBet: 'Not yet placed',
+      otherScoresLabel: 'Other scores',
+      scoreAlreadyBetCount: 'Placed {count}/3',
+      scoreBetHolding: 'You are holding {count}/3 exact score tickets.',
+      scoreBetLimitHint: 'You can place up to 3 exact score bets for this match.',
+      scoreChosenLabel: 'Chosen',
+      scoreTabHint: 'Use the Exact score tab to place this bet.'
     }
   };
 
@@ -267,11 +347,15 @@
     setText('registerHint', 'registerHint');
     setText('showLogin', 'loginLink');
     setText('tabOpenMatches', 'tabOpenMatches');
+    setText('tabOverUnderMatches', 'tabOverUnderMatches');
+    setText('tabScoreMatches', 'tabScoreMatches');
     setText('tabClosedMatches', 'tabClosedMatches');
     setText('tabLeaderboard', 'tabLeaderboard');
     setText('tabMyBets', 'tabMyBets');
     setText('tabSpecials', 'tabSpecials');
     setText('openMatchesTitle', 'openMatchesTitle');
+    setText('overUnderMatchesTitle', 'overUnderMatchesTitle');
+    setText('scoreMatchesTitle', 'scoreMatchesTitle');
     setText('closedMatchesTitle', 'closedMatchesTitle');
     setText('leaderboardTitle', 'leaderboardTitle');
     setText('myBetsTitle', 'myBetsTitle');
@@ -311,6 +395,8 @@
     const betMode = document.getElementById('newBetMode');
     if (betMode?.options?.[0]) betMode.options[0].text = t('placeholderNewBetMode1');
     if (betMode?.options?.[1]) betMode.options[1].text = t('placeholderNewBetMode2');
+    if (betMode?.options?.[2]) betMode.options[2].text = t('placeholderNewBetMode3');
+    if (betMode?.options?.[3]) betMode.options[3].text = t('placeholderNewBetMode4');
 
     document.querySelectorAll('.lang-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.lang === getLang());
