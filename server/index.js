@@ -72,6 +72,9 @@ function defaultDb() {
       enabled: false,
       message: ''
     },
+    registration: {
+      enabled: true
+    },
     users: [],
     matches: seedMatches(),
     bets: []
@@ -271,6 +274,12 @@ if (typeof db.maintenance.enabled !== 'boolean') {
 if (typeof db.maintenance.message !== 'string') {
   db.maintenance.message = '';
 }
+if (!db.registration || typeof db.registration !== 'object') {
+  db.registration = defaultDb().registration;
+}
+if (typeof db.registration.enabled !== 'boolean') {
+  db.registration.enabled = true;
+}
 if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') {
   db.specialPredictionConfig = defaultDb().specialPredictionConfig;
 }
@@ -369,6 +378,8 @@ async function loadDbRemoteIfEnabled() {
     if (!db.maintenance || typeof db.maintenance !== 'object') db.maintenance = defaultDb().maintenance;
     if (typeof db.maintenance.enabled !== 'boolean') db.maintenance.enabled = false;
     if (typeof db.maintenance.message !== 'string') db.maintenance.message = '';
+    if (!db.registration || typeof db.registration !== 'object') db.registration = defaultDb().registration;
+    if (typeof db.registration.enabled !== 'boolean') db.registration.enabled = true;
     if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') db.specialPredictionConfig = defaultDb().specialPredictionConfig;
     if (typeof db.specialPredictionConfig.deadline_iso !== 'string' || !db.specialPredictionConfig.deadline_iso) db.specialPredictionConfig.deadline_iso = SPECIAL_PREDICTION_DEADLINE_ISO;
     if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') db.specialPredictionConfig.manually_locked = false;
@@ -915,6 +926,13 @@ function getMaintenanceState(user = null) {
   };
 }
 
+function getRegistrationState() {
+  const cfg = db.registration || {};
+  return {
+    enabled: cfg.enabled !== false
+  };
+}
+
 function currentUser(req) {
   applyDailyBonusToAllUsers();
   const user = getSessionUserRecord(req);
@@ -940,6 +958,11 @@ app.use('/api', (req, res, next) => {
 });
 
 app.post('/api/register', async (req, res) => {
+  const registration = getRegistrationState();
+  if (!registration.enabled) {
+    return res.status(403).json({ error: 'Registration closed.' });
+  }
+
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
   const fullName = String(req.body.fullName || '').trim();
@@ -1047,7 +1070,8 @@ app.get('/api/me', (req, res) => {
   const maintenance = getMaintenanceState(userRecord);
   res.json({
     user: maintenance.enabled && !maintenance.can_access ? null : currentUser(req),
-    maintenance
+    maintenance,
+    registration: getRegistrationState()
   });
 });
 
@@ -1295,6 +1319,16 @@ app.post('/api/admin/maintenance', requireAdmin, (req, res) => {
   db.maintenance.message = String(req.body.message || '').trim().slice(0, 500);
   saveDb();
   res.json({ ok: true, maintenance: getMaintenanceState(getSessionUserRecord(req)) });
+});
+
+app.get('/api/admin/registration', requireAdmin, (req, res) => {
+  res.json({ registration: getRegistrationState() });
+});
+
+app.post('/api/admin/registration', requireAdmin, (req, res) => {
+  db.registration.enabled = Boolean(req.body.enabled);
+  saveDb();
+  res.json({ ok: true, registration: getRegistrationState() });
 });
 
 app.get('/api/admin/daily-bonus', requireAdmin, (req, res) => {

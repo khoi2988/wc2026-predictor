@@ -25,6 +25,9 @@
       throw new Error(data.error || 'Yêu cầu đăng nhập lại.');
     }
     if (res.status === 403) {
+      if (data.error === 'Registration closed.') {
+        throw new Error('Đăng ký tài khoản mới hiện đang tạm đóng.');
+      }
       if (data.error === 'Account disabled.') {
         throw new Error('Tài khoản này đã bị vô hiệu hóa.');
       }
@@ -64,6 +67,7 @@ const els = {
   adminPanel: document.getElementById('adminPanel'),
   adminOnlyDailyBonus: document.getElementById('adminOnlyDailyBonus'),
   maintenanceConfigBlock: document.getElementById('maintenanceConfigBlock'),
+  registrationConfigBlock: document.getElementById('registrationConfigBlock'),
   adminUserExportBlock: document.getElementById('adminUserExportBlock'),
   adminOnlyExtra: document.getElementById('adminOnlyExtra'),
   matchCreateRow: document.getElementById('matchCreateRow'),
@@ -72,6 +76,7 @@ const els = {
   adminSpecialsStatus: document.getElementById('adminSpecialsStatus'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   maintenanceInfo: document.getElementById('maintenanceInfo'),
+  registrationInfo: document.getElementById('registrationInfo'),
   currentUserLabel: document.getElementById('currentUserLabel'),
   changePasswordForm: document.getElementById('changePasswordForm'),
   fullNameLockCard: document.getElementById('fullNameLockCard'),
@@ -90,6 +95,7 @@ let pendingAdminAction = null;
 let activeTabId = 'openMatchesTab';
 let activeAdminMatchesTab = 'open';
 let maintenanceState = { enabled: false, can_access: true, message: '' };
+let registrationState = { enabled: true };
 let selectedOpenMatchDay = 'ALL';
 let selectedScoreMatchDay = 'ALL';
 let selectedClosedMatchDay = 'ALL';
@@ -208,6 +214,7 @@ function showRegisterForm() {
 function syncMaintenanceUI() {
   const isBlocked = Boolean(maintenanceState.enabled && !maintenanceState.can_access);
   const isMaintenanceEnabled = Boolean(maintenanceState.enabled);
+  const isRegistrationEnabled = Boolean(registrationState.enabled);
   setVisible(els.maintenanceCard, isBlocked);
 
   if (els.maintenanceText) {
@@ -220,14 +227,16 @@ function syncMaintenanceUI() {
   const showRegisterLink = document.getElementById('showRegister');
   const loginHint = document.getElementById('loginHint');
   if (showRegisterLink) {
-    showRegisterLink.classList.toggle('hidden', isMaintenanceEnabled);
+    showRegisterLink.classList.toggle('hidden', isMaintenanceEnabled || !isRegistrationEnabled);
   }
   if (loginHint) {
     loginHint.textContent = isMaintenanceEnabled
       ? 'Đăng ký tạm thời bị tắt khi bảo trì.'
+      : !isRegistrationEnabled
+        ? 'Đăng ký tài khoản mới hiện đang tạm đóng.'
       : 'Chưa có tài khoản?';
   }
-  if (isMaintenanceEnabled && !els.registerForm.classList.contains('hidden')) {
+  if ((isMaintenanceEnabled || !isRegistrationEnabled) && !els.registerForm.classList.contains('hidden')) {
     showLoginForm();
   }
 }
@@ -1005,6 +1014,7 @@ async function adminApi(url, options = {}) {
 async function refresh() {
   const meRes = await api('/api/me');
   maintenanceState = meRes.maintenance || { enabled: false, can_access: true, message: '' };
+  registrationState = meRes.registration || { enabled: true };
   syncMaintenanceUI();
   const user = meRes.user;
 
@@ -1054,13 +1064,14 @@ async function refresh() {
     els.adminPanel.classList.remove('hidden');
     els.adminOnlyDailyBonus.classList.toggle('hidden', !user.is_admin);
     els.maintenanceConfigBlock.classList.toggle('hidden', !user.is_admin);
+    els.registrationConfigBlock.classList.toggle('hidden', !user.is_admin);
     els.adminUserExportBlock.classList.toggle('hidden', !canExportUsers);
     els.adminOnlyExtra.classList.toggle('hidden', !user.is_admin);
     els.matchCreateRow.classList.toggle('hidden', !canManageOdds);
     document.getElementById('btnAdminLoad').classList.toggle('hidden', !(canManageOdds || canSetResult));
     document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !canExportUsers);
     if (user.is_admin) {
-      adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderAdminSpecials());
+      adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderRegistrationConfig(), renderAdminSpecials());
     }
   } else {
     els.adminPanel.classList.add('hidden');
@@ -1100,6 +1111,18 @@ async function renderMaintenanceConfig() {
       : 'Trang đang hoạt động bình thường.';
   } catch (e) {
     els.maintenanceInfo.textContent = e.message;
+  }
+}
+
+async function renderRegistrationConfig() {
+  try {
+    const data = await adminApi('/api/admin/registration');
+    document.getElementById('registrationEnabled').checked = Boolean(data.registration?.enabled);
+    els.registrationInfo.textContent = data.registration?.enabled
+      ? 'Đang cho phép người chơi tự tạo tài khoản mới.'
+      : 'Đang tắt đăng ký tài khoản mới.';
+  } catch (e) {
+    els.registrationInfo.textContent = e.message;
   }
 }
 
@@ -1880,6 +1903,20 @@ document.getElementById('btnAddMatch').onclick = async () => {
     });
     setMessage('Thêm trận thành công', 'success');
     await Promise.all([refresh(), renderAdminMatches()]);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+document.getElementById('btnSaveRegistration').onclick = async () => {
+  try {
+    const enabled = document.getElementById('registrationEnabled').checked;
+    await adminApi('/api/admin/registration', {
+      method: 'POST',
+      body: JSON.stringify({ enabled })
+    });
+    setMessage(enabled ? 'Đã mở đăng ký tài khoản mới' : 'Đã đóng đăng ký tài khoản mới', 'success');
+    await refresh();
   } catch (e) {
     setMessage(e.message, 'error');
   }
