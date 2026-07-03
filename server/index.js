@@ -39,10 +39,10 @@ const supabase = useRemoteDb ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_
 
 function seedMatches() {
   return [
-    { id: 1, team_a: 'Brazil', team_b: 'France', kickoff_at: '2026-06-20T19:00:00Z', bet_mode: '1X2', odds_home: 2.2, odds_draw: 3.2, odds_away: 3.1, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
-    { id: 2, team_a: 'Argentina', team_b: 'Germany', kickoff_at: '2026-06-21T19:00:00Z', bet_mode: '1X2', odds_home: 2.5, odds_draw: 3.1, odds_away: 2.8, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
-    { id: 3, team_a: 'Spain', team_b: 'England', kickoff_at: '2026-06-22T19:00:00Z', bet_mode: '1X2', odds_home: 2.7, odds_draw: 3.0, odds_away: 2.6, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() },
-    { id: 4, team_a: 'Portugal', team_b: 'Netherlands', kickoff_at: '2026-06-23T19:00:00Z', bet_mode: '1X2', odds_home: 2.8, odds_draw: 3.2, odds_away: 2.5, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, result: null, created_at: new Date().toISOString() }
+    { id: 1, team_a: 'Brazil', team_b: 'France', kickoff_at: '2026-06-20T19:00:00Z', bet_mode: '1X2', odds_home: 2.2, odds_draw: 3.2, odds_away: 3.1, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, total_line: null, odds_over: null, odds_under: null, result: null, created_at: new Date().toISOString() },
+    { id: 2, team_a: 'Argentina', team_b: 'Germany', kickoff_at: '2026-06-21T19:00:00Z', bet_mode: '1X2', odds_home: 2.5, odds_draw: 3.1, odds_away: 2.8, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, total_line: null, odds_over: null, odds_under: null, result: null, created_at: new Date().toISOString() },
+    { id: 3, team_a: 'Spain', team_b: 'England', kickoff_at: '2026-06-22T19:00:00Z', bet_mode: '1X2', odds_home: 2.7, odds_draw: 3.0, odds_away: 2.6, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, total_line: null, odds_over: null, odds_under: null, result: null, created_at: new Date().toISOString() },
+    { id: 4, team_a: 'Portugal', team_b: 'Netherlands', kickoff_at: '2026-06-23T19:00:00Z', bet_mode: '1X2', odds_home: 2.8, odds_draw: 3.2, odds_away: 2.5, handicap_line: null, odds_handicap_home: null, odds_handicap_away: null, total_line: null, odds_over: null, odds_under: null, result: null, created_at: new Date().toISOString() }
   ];
 }
 
@@ -118,6 +118,9 @@ function exportMarketLabel(market, handicapLine) {
   if (normalized === 'HANDICAP') {
     return typeof handicapLine === 'number' ? `Kèo chấp (${handicapLine})` : 'Kèo chấp';
   }
+  if (normalized === 'OVER_UNDER') {
+    return typeof handicapLine === 'number' ? `Tài/Xỉu (${handicapLine})` : 'Tài/Xỉu';
+  }
   if (normalized === 'SCORE') return 'Tỷ số chính xác';
   return '1X2';
 }
@@ -133,6 +136,11 @@ function exportPickLabel(match, market, pick, handicapLine) {
   }
   if (normalizedMarket === 'SCORE') {
     return normalizedPick === 'OTHER' ? 'Tỷ số khác' : normalizedPick;
+  }
+  if (normalizedMarket === 'OVER_UNDER') {
+    if (normalizedPick === 'OVER') return `Tài ${handicapLine ?? ''}`.trim();
+    if (normalizedPick === 'UNDER') return `Xỉu ${handicapLine ?? ''}`.trim();
+    return normalizedPick;
   }
   if (normalizedPick === 'HOME') return `${match?.team_a || 'Đội nhà'} thắng`;
   if (normalizedPick === 'DRAW') return 'Hòa';
@@ -164,6 +172,28 @@ function canonicalTeamName(name) {
   const trimmed = String(name || '').trim();
   if (!trimmed) return '';
   return TEAM_NAME_MAP[normalizeName(trimmed)] || trimmed;
+}
+
+function normalizeBetMode(mode) {
+  const raw = String(mode || '1X2').trim().toUpperCase();
+  const compact = raw.replace(/[\s/_-]+/g, '');
+  if (['1X2', 'X12'].includes(compact)) return '1X2';
+  if (['HANDICAP', 'ASIANHANDICAP', 'HCAP', 'HDP'].includes(compact)) return 'HANDICAP';
+  if (['SCORE', 'EXACTSCORE', 'CORRECTSCORE'].includes(compact)) return 'SCORE';
+  if (['OVERUNDER', 'OU', 'OVERXIU', 'TAIXIU', 'TAIXIUO', 'OVERXIUO'].includes(compact)) return 'OVER_UNDER';
+  return raw;
+}
+
+function parseAsianLine(rawValue) {
+  if (rawValue === undefined || rawValue === null) return null;
+  const raw = String(rawValue).trim();
+  if (!raw) return null;
+  const normalized = raw.replace(',', '.');
+  if (/^\d+(\.\d+)?$/.test(normalized)) {
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return Number.NaN;
 }
 
 function normalizeScoreOddsKey(score) {
@@ -248,12 +278,17 @@ for (const match of db.matches) {
   match.team_b = canonicalTeamName(match.team_b);
   if (!Number.isInteger(match.home_score)) match.home_score = null;
   if (!Number.isInteger(match.away_score)) match.away_score = null;
-  if (!['1X2', 'HANDICAP', 'SCORE'].includes(match.bet_mode)) {
-    match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
+  if (!['1X2', 'HANDICAP', 'SCORE', 'OVER_UNDER'].includes(match.bet_mode)) {
+    match.bet_mode = typeof match.handicap_line === 'number'
+      ? 'HANDICAP'
+      : (typeof match.total_line === 'number' ? 'OVER_UNDER' : '1X2');
   }
   if (typeof match.handicap_line !== 'number') match.handicap_line = null;
   if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
   if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
+  if (typeof match.total_line !== 'number') match.total_line = null;
+  if (typeof match.odds_over !== 'number') match.odds_over = null;
+  if (typeof match.odds_under !== 'number') match.odds_under = null;
   match.score_odds = normalizeScoreOddsMap(match.score_odds);
 }
 if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) {
@@ -364,12 +399,17 @@ async function loadDbRemoteIfEnabled() {
       match.team_b = canonicalTeamName(match.team_b);
       if (!Number.isInteger(match.home_score)) match.home_score = null;
       if (!Number.isInteger(match.away_score)) match.away_score = null;
-      if (!['1X2', 'HANDICAP', 'SCORE'].includes(match.bet_mode)) {
-        match.bet_mode = typeof match.handicap_line === 'number' ? 'HANDICAP' : '1X2';
+      if (!['1X2', 'HANDICAP', 'SCORE', 'OVER_UNDER'].includes(match.bet_mode)) {
+        match.bet_mode = typeof match.handicap_line === 'number'
+          ? 'HANDICAP'
+          : (typeof match.total_line === 'number' ? 'OVER_UNDER' : '1X2');
       }
       if (typeof match.handicap_line !== 'number') match.handicap_line = null;
       if (typeof match.odds_handicap_home !== 'number') match.odds_handicap_home = null;
       if (typeof match.odds_handicap_away !== 'number') match.odds_handicap_away = null;
+      if (typeof match.total_line !== 'number') match.total_line = null;
+      if (typeof match.odds_over !== 'number') match.odds_over = null;
+      if (typeof match.odds_under !== 'number') match.odds_under = null;
       match.score_odds = normalizeScoreOddsMap(match.score_odds);
     }
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
@@ -857,6 +897,47 @@ function settleAsianHandicapBet({ homeScore, awayScore, line, pick, stake, odds 
   return { status, payout };
 }
 
+function settleOverUnderBet({ homeScore, awayScore, line, pick, stake, odds }) {
+  const totalGoals = homeScore + awayScore;
+  const decimalPart = Math.abs(line % 1);
+  const isQuarter = Math.abs(decimalPart - 0.25) < 1e-9 || Math.abs(decimalPart - 0.75) < 1e-9;
+
+  const evaluate = (legStake, legLine) => {
+    let outcome = 'LOSE';
+    if (pick === 'OVER') {
+      if (totalGoals > legLine) outcome = 'WIN';
+      else if (totalGoals === legLine) outcome = 'PUSH';
+    } else {
+      if (totalGoals < legLine) outcome = 'WIN';
+      else if (totalGoals === legLine) outcome = 'PUSH';
+    }
+    if (outcome === 'WIN') return { credit: Math.floor(legStake * odds), outcome: 'WIN' };
+    if (outcome === 'PUSH') return { credit: legStake, outcome: 'PUSH' };
+    return { credit: 0, outcome: 'LOSE' };
+  };
+
+  if (!isQuarter) {
+    const leg = evaluate(stake, line);
+    const status = leg.outcome === 'WIN' ? 'won' : (leg.outcome === 'PUSH' ? 'refund' : 'lost');
+    return { status, payout: leg.credit };
+  }
+
+  const [stakeA, stakeB] = splitStakeInteger(stake);
+  const legA = evaluate(stakeA, line - 0.25);
+  const legB = evaluate(stakeB, line + 0.25);
+  const payout = legA.credit + legB.credit;
+  const outcomes = [legA.outcome, legB.outcome].sort().join('_');
+
+  let status = 'lost';
+  if (outcomes === 'WIN_WIN') status = 'won';
+  else if (outcomes === 'LOSE_LOSE') status = 'lost';
+  else if (outcomes === 'PUSH_PUSH') status = 'refund';
+  else if (outcomes.includes('WIN') && outcomes.includes('PUSH')) status = 'half_won';
+  else if (outcomes.includes('LOSE') && outcomes.includes('PUSH')) status = 'half_lost';
+
+  return { status, payout };
+}
+
 function calculateBetSettlement(match, bet) {
   const market = String(bet.market || '1X2');
   if (market === 'HANDICAP') {
@@ -867,6 +948,20 @@ function calculateBetSettlement(match, bet) {
       homeScore: match.home_score,
       awayScore: match.away_score,
       line: bet.handicap_line,
+      pick: bet.pick,
+      stake: bet.stake,
+      odds: bet.odds
+    });
+  }
+
+  if (market === 'OVER_UNDER') {
+    if (!Number.isInteger(match.home_score) || !Number.isInteger(match.away_score) || typeof bet.total_line !== 'number') {
+      return null;
+    }
+    return settleOverUnderBet({
+      homeScore: match.home_score,
+      awayScore: match.away_score,
+      line: bet.total_line,
       pick: bet.pick,
       stake: bet.stake,
       odds: bet.odds
@@ -1475,9 +1570,9 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
         'Đội A': m?.team_a || b.match_team_a || '',
         'Đội B': m?.team_b || b.match_team_b || '',
         'Giờ đá': m?.kickoff_at || b.match_kickoff_at || '',
-        'Thể thức': exportMarketLabel(b.market, b.handicap_line),
-        'Kèo chấp': b.handicap_line ?? '',
-        'Lựa chọn': exportPickLabel(m || { team_a: b.match_team_a, team_b: b.match_team_b }, b.market, b.pick, b.handicap_line),
+        'Thể thức': exportMarketLabel(b.market, b.total_line ?? b.handicap_line),
+        'Mốc kèo': b.total_line ?? b.handicap_line ?? '',
+        'Lựa chọn': exportPickLabel(m || { team_a: b.match_team_a, team_b: b.match_team_b }, b.market, b.pick, b.total_line ?? b.handicap_line),
         'Điểm cược': b.stake,
         'Tỷ lệ': b.odds,
         'Trạng thái': exportBetStatusLabel(b.status),
@@ -1494,7 +1589,7 @@ app.get('/api/admin/users/:id/export', requirePermission('can_export_user_histor
     'Đội B',
     'Giờ đá',
     'Thể thức',
-    'Kèo chấp',
+    'Mốc kèo',
     'Lựa chọn',
     'Điểm cược',
     'Tỷ lệ',
@@ -1532,9 +1627,9 @@ app.get('/api/admin/matches/:id/export-settlement', requirePermission('can_set_r
       'ID người chơi': b.user_id,
       'Tài khoản': user?.username || '',
       'Họ và tên': user?.full_name || '',
-      'Thể thức': exportMarketLabel(b.market, b.handicap_line),
-      'Lựa chọn': exportPickLabel(match, b.market, b.pick, b.handicap_line),
-      'Kèo chấp': b.handicap_line ?? '',
+      'Thể thức': exportMarketLabel(b.market, b.total_line ?? b.handicap_line),
+      'Lựa chọn': exportPickLabel(match, b.market, b.pick, b.total_line ?? b.handicap_line),
+      'Mốc kèo': b.total_line ?? b.handicap_line ?? '',
       'Điểm cược': b.stake,
       'Tỷ lệ': b.odds,
       'Trạng thái': exportBetStatusLabel(b.status || ''),
@@ -1556,7 +1651,7 @@ app.get('/api/admin/matches/:id/export-settlement', requirePermission('can_set_r
     'Họ và tên',
     'Thể thức',
     'Lựa chọn',
-    'Kèo chấp',
+    'Mốc kèo',
     'Điểm cược',
     'Tỷ lệ',
     'Trạng thái',
@@ -1612,12 +1707,13 @@ app.post('/api/bets', requireAuth, (req, res) => {
   const market = String(req.body.market || '1X2').toUpperCase();
   const user = db.users.find((u) => u.id === req.session.user.id);
 
-  if (!Number.isInteger(matchId) || !['1X2', 'HANDICAP', 'SCORE'].includes(market)) {
+  if (!Number.isInteger(matchId) || !['1X2', 'HANDICAP', 'SCORE', 'OVER_UNDER'].includes(market)) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
   }
   if (
     (market === '1X2' && !['HOME', 'DRAW', 'AWAY'].includes(pick)) ||
     (market === 'HANDICAP' && !['HOME', 'AWAY'].includes(pick)) ||
+    (market === 'OVER_UNDER' && !['OVER', 'UNDER'].includes(pick)) ||
     (market === 'SCORE' && pick !== 'OTHER' && !/^\d+\-\d+$/.test(pick))
   ) {
     return res.status(400).json({ error: 'Invalid bet payload.' });
@@ -1655,6 +1751,7 @@ app.post('/api/bets', requireAuth, (req, res) => {
 
   let odds = match.odds_draw;
   let handicapLine = null;
+  let totalLine = null;
   if (market === '1X2') {
     if (pick === 'HOME') odds = match.odds_home;
     if (pick === 'AWAY') odds = match.odds_away;
@@ -1664,6 +1761,12 @@ app.post('/api/bets', requireAuth, (req, res) => {
     }
     handicapLine = match.handicap_line;
     odds = pick === 'HOME' ? match.odds_handicap_home : match.odds_handicap_away;
+  } else if (market === 'OVER_UNDER') {
+    if (typeof match.total_line !== 'number' || typeof match.odds_over !== 'number' || typeof match.odds_under !== 'number') {
+      return res.status(400).json({ error: 'Trận này chưa cấu hình kèo tài xỉu.' });
+    }
+    totalLine = match.total_line;
+    odds = pick === 'OVER' ? match.odds_over : match.odds_under;
   } else {
     const scoreOdds = normalizeScoreOddsMap(match.score_odds);
     if (!Object.keys(scoreOdds).length) {
@@ -1688,6 +1791,7 @@ app.post('/api/bets', requireAuth, (req, res) => {
     stake,
     odds,
     handicap_line: handicapLine,
+    total_line: totalLine,
     status: 'open',
     payout: null,
     created_at: new Date().toISOString()
@@ -1742,17 +1846,23 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
   const oddsAway = Number(req.body.oddsAway);
-  const betMode = String(req.body.betMode || '1X2').toUpperCase();
+  const betMode = normalizeBetMode(req.body.betMode || '1X2');
   const handicapLineRaw = req.body.handicapLine;
-  const handicapLine = handicapLineRaw === undefined || handicapLineRaw === null || handicapLineRaw === '' ? null : Number(handicapLineRaw);
+  const handicapLine = parseAsianLine(handicapLineRaw);
   const oddsHandicapHomeRaw = req.body.oddsHandicapHome;
   const oddsHandicapAwayRaw = req.body.oddsHandicapAway;
   const oddsHandicapHome = oddsHandicapHomeRaw === undefined || oddsHandicapHomeRaw === null || oddsHandicapHomeRaw === '' ? null : Number(oddsHandicapHomeRaw);
   const oddsHandicapAway = oddsHandicapAwayRaw === undefined || oddsHandicapAwayRaw === null || oddsHandicapAwayRaw === '' ? null : Number(oddsHandicapAwayRaw);
+  const totalLineRaw = req.body.totalLine;
+  const totalLine = parseAsianLine(totalLineRaw);
+  const oddsOverRaw = req.body.oddsOver;
+  const oddsUnderRaw = req.body.oddsUnder;
+  const oddsOver = oddsOverRaw === undefined || oddsOverRaw === null || oddsOverRaw === '' ? null : Number(oddsOverRaw);
+  const oddsUnder = oddsUnderRaw === undefined || oddsUnderRaw === null || oddsUnderRaw === '' ? null : Number(oddsUnderRaw);
   let scoreOdds = {};
 
   if (!teamA || !teamB || !kickoffAt) return res.status(400).json({ error: 'Missing team or kickoff.' });
-  if (!['1X2', 'HANDICAP', 'SCORE'].includes(betMode)) {
+  if (!['1X2', 'HANDICAP', 'SCORE', 'OVER_UNDER'].includes(betMode)) {
     return res.status(400).json({ error: 'Invalid bet mode.' });
   }
   if (betMode === '1X2' && [oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
@@ -1763,6 +1873,13 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
     if (oddsHandicapHome === null || oddsHandicapAway === null) return res.status(400).json({ error: 'Missing handicap odds.' });
     if ([oddsHandicapHome, oddsHandicapAway].some((x) => Number.isNaN(x) || x <= 1)) {
       return res.status(400).json({ error: 'Invalid handicap odds.' });
+    }
+  }
+  if (betMode === 'OVER_UNDER') {
+    if (totalLine === null || Number.isNaN(totalLine) || totalLine <= 0) return res.status(400).json({ error: 'Invalid total line.' });
+    if (oddsOver === null || oddsUnder === null) return res.status(400).json({ error: 'Missing over/under odds.' });
+    if ([oddsOver, oddsUnder].some((x) => Number.isNaN(x) || x <= 1)) {
+      return res.status(400).json({ error: 'Invalid over/under odds.' });
     }
   }
   if (betMode === 'SCORE') {
@@ -1791,6 +1908,9 @@ app.post('/api/admin/matches', requirePermission('can_manage_odds'), (req, res) 
     handicap_line: betMode === 'HANDICAP' ? handicapLine : null,
     odds_handicap_home: betMode === 'HANDICAP' ? oddsHandicapHome : null,
     odds_handicap_away: betMode === 'HANDICAP' ? oddsHandicapAway : null,
+    total_line: betMode === 'OVER_UNDER' ? totalLine : null,
+    odds_over: betMode === 'OVER_UNDER' ? oddsOver : null,
+    odds_under: betMode === 'OVER_UNDER' ? oddsUnder : null,
     score_odds: betMode === 'SCORE' ? scoreOdds : {},
     home_score: null,
     away_score: null,
@@ -1813,7 +1933,10 @@ app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, re
     'oddsAway',
     'handicapLine',
     'oddsHandicapHome',
-    'oddsHandicapAway'
+    'oddsHandicapAway',
+    'totalLine',
+    'oddsOver',
+    'oddsUnder'
   ].some((key) => req.body[key] !== undefined);
   if (isOddsPayload && !match.result && hasMatchStarted(match)) {
     return res.status(400).json({ error: 'Cannot edit odds after kickoff.' });
@@ -1847,7 +1970,7 @@ app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, re
       match.odds_handicap_home = null;
       match.odds_handicap_away = null;
     } else {
-      const v = Number(req.body.handicapLine);
+      const v = parseAsianLine(req.body.handicapLine);
       if (Number.isNaN(v) || v < 0) return res.status(400).json({ error: 'Invalid handicapLine.' });
       match.handicap_line = v;
     }
@@ -1870,8 +1993,40 @@ app.put('/api/admin/matches/:id', requirePermission('can_manage_odds'), (req, re
       match.odds_handicap_away = v;
     }
   }
+  if (req.body.totalLine !== undefined) {
+    if (req.body.totalLine === null || req.body.totalLine === '') {
+      match.total_line = null;
+      match.odds_over = null;
+      match.odds_under = null;
+    } else {
+      const v = parseAsianLine(req.body.totalLine);
+      if (Number.isNaN(v) || v <= 0) return res.status(400).json({ error: 'Invalid totalLine.' });
+      match.total_line = v;
+    }
+  }
+  if (req.body.oddsOver !== undefined) {
+    if (req.body.oddsOver === null || req.body.oddsOver === '') {
+      match.odds_over = null;
+    } else {
+      const v = Number(req.body.oddsOver);
+      if (Number.isNaN(v) || v <= 1) return res.status(400).json({ error: 'Invalid oddsOver.' });
+      match.odds_over = v;
+    }
+  }
+  if (req.body.oddsUnder !== undefined) {
+    if (req.body.oddsUnder === null || req.body.oddsUnder === '') {
+      match.odds_under = null;
+    } else {
+      const v = Number(req.body.oddsUnder);
+      if (Number.isNaN(v) || v <= 1) return res.status(400).json({ error: 'Invalid oddsUnder.' });
+      match.odds_under = v;
+    }
+  }
   if (match.handicap_line !== null && (typeof match.odds_handicap_home !== 'number' || typeof match.odds_handicap_away !== 'number')) {
     return res.status(400).json({ error: 'Handicap line requires both handicap odds.' });
+  }
+  if (match.total_line !== null && (typeof match.odds_over !== 'number' || typeof match.odds_under !== 'number')) {
+    return res.status(400).json({ error: 'Total line requires both over and under odds.' });
   }
   saveDb();
   res.json({ ok: true });
@@ -1997,8 +2152,8 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
   const oddsHome = Number(req.body.oddsHome);
   const oddsDraw = Number(req.body.oddsDraw);
   const oddsAway = Number(req.body.oddsAway);
-  const betMode = String(req.body.betMode || match.bet_mode || '1X2').toUpperCase();
-  if (!['1X2', 'HANDICAP', 'SCORE'].includes(betMode)) return res.status(400).json({ error: 'Invalid bet mode.' });
+  const betMode = normalizeBetMode(req.body.betMode || match.bet_mode || '1X2');
+  if (!['1X2', 'HANDICAP', 'SCORE', 'OVER_UNDER'].includes(betMode)) return res.status(400).json({ error: 'Invalid bet mode.' });
 
   if (betMode === '1X2') {
     if ([oddsHome, oddsDraw, oddsAway].some((x) => Number.isNaN(x) || x <= 1)) {
@@ -2011,11 +2166,12 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
     match.handicap_line = null;
     match.odds_handicap_home = null;
     match.odds_handicap_away = null;
+    match.total_line = null;
+    match.odds_over = null;
+    match.odds_under = null;
     match.score_odds = {};
   } else if (betMode === 'HANDICAP') {
-    const handicapLine = req.body.handicapLine === undefined || req.body.handicapLine === null || req.body.handicapLine === ''
-      ? null
-      : Number(req.body.handicapLine);
+    const handicapLine = parseAsianLine(req.body.handicapLine);
     const oddsHandicapHome = Number(req.body.oddsHandicapHome);
     const oddsHandicapAway = Number(req.body.oddsHandicapAway);
     if (handicapLine === null || Number.isNaN(handicapLine) || handicapLine < 0) return res.status(400).json({ error: 'Invalid handicap line.' });
@@ -2023,9 +2179,34 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
       return res.status(400).json({ error: 'Invalid handicap odds.' });
     }
     match.bet_mode = 'HANDICAP';
+    match.odds_home = null;
+    match.odds_draw = null;
+    match.odds_away = null;
     match.handicap_line = handicapLine;
     match.odds_handicap_home = oddsHandicapHome;
     match.odds_handicap_away = oddsHandicapAway;
+    match.total_line = null;
+    match.odds_over = null;
+    match.odds_under = null;
+    match.score_odds = {};
+  } else if (betMode === 'OVER_UNDER') {
+    const totalLine = parseAsianLine(req.body.totalLine);
+    const oddsOver = Number(req.body.oddsOver);
+    const oddsUnder = Number(req.body.oddsUnder);
+    if (totalLine === null || Number.isNaN(totalLine) || totalLine <= 0) return res.status(400).json({ error: 'Invalid total line.' });
+    if ([oddsOver, oddsUnder].some((x) => Number.isNaN(x) || x <= 1)) {
+      return res.status(400).json({ error: 'Invalid over/under odds.' });
+    }
+    match.bet_mode = 'OVER_UNDER';
+    match.odds_home = null;
+    match.odds_draw = null;
+    match.odds_away = null;
+    match.handicap_line = null;
+    match.odds_handicap_home = null;
+    match.odds_handicap_away = null;
+    match.total_line = totalLine;
+    match.odds_over = oddsOver;
+    match.odds_under = oddsUnder;
     match.score_odds = {};
   } else {
     let scoreOdds = {};
@@ -2041,6 +2222,9 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
     match.handicap_line = null;
     match.odds_handicap_home = null;
     match.odds_handicap_away = null;
+    match.total_line = null;
+    match.odds_over = null;
+    match.odds_under = null;
     match.score_odds = scoreOdds;
   }
   saveDb();

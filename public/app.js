@@ -189,7 +189,7 @@ function syncNewMatchModeUI() {
     } else if (isHandicap) {
       hintEl.textContent = tr('newBetHintHandicap', {}, 'Ví dụ kèo chấp: Mốc chấp = 0.5, Odds chấp đội A = 1.95, Odds chấp đội B = 1.95');
     } else if (isOverUnder) {
-      hintEl.textContent = tr('newBetHintOverUnder', {}, 'Ví dụ tài/xỉu: Mốc tài/xỉu = 2.5, Odds Tài = 1.95, Odds Xỉu = 1.95');
+      hintEl.textContent = tr('newBetHintOverUnder', {}, 'Ví dụ tài/xỉu: Mốc tài/xỉu = 2.25 hoặc 2.75, Odds Tài = 1.95, Odds Xỉu = 1.95');
     } else if (isScore) {
       hintEl.textContent = tr('newBetHintScore', {}, 'Ví dụ tỷ số chính xác: 1-0=9.3, 2-0=8.9, 2-1=7.9, OTHER=25');
     } else {
@@ -2014,7 +2014,7 @@ document.getElementById('btnAddMatch').onclick = async () => {
     }
     if (betMode === 'OVER_UNDER') {
       if (totalLine === null || Number.isNaN(totalLine) || totalLine <= 0) {
-        setMessage('Mốc tài/xỉu không hợp lệ. Ví dụ: 2.5', 'error');
+        setMessage('Mốc tài/xỉu không hợp lệ. Ví dụ: 2.25 hoặc 2.75', 'error');
         return;
       }
       if (oddsOver === null || oddsUnder === null || oddsOver <= 1 || oddsUnder <= 1) {
