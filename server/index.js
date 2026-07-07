@@ -51,6 +51,7 @@ function defaultDb() {
     nextUserId: 1,
     nextBetId: 1,
     nextMatchId: 5,
+    nextOverrideAuditId: 1,
     lastSyncAt: null,
     lastSyncError: null,
     specialMarkets: [
@@ -75,6 +76,7 @@ function defaultDb() {
     registration: {
       enabled: true
     },
+    overrideAuditLogs: [],
     users: [],
     matches: seedMatches(),
     bets: []
@@ -315,6 +317,12 @@ if (!db.registration || typeof db.registration !== 'object') {
 if (typeof db.registration.enabled !== 'boolean') {
   db.registration.enabled = true;
 }
+if (!Number.isInteger(db.nextOverrideAuditId) || db.nextOverrideAuditId < 1) {
+  db.nextOverrideAuditId = 1;
+}
+if (!Array.isArray(db.overrideAuditLogs)) {
+  db.overrideAuditLogs = [];
+}
 if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') {
   db.specialPredictionConfig = defaultDb().specialPredictionConfig;
 }
@@ -420,6 +428,8 @@ async function loadDbRemoteIfEnabled() {
     if (typeof db.maintenance.message !== 'string') db.maintenance.message = '';
     if (!db.registration || typeof db.registration !== 'object') db.registration = defaultDb().registration;
     if (typeof db.registration.enabled !== 'boolean') db.registration.enabled = true;
+    if (!Number.isInteger(db.nextOverrideAuditId) || db.nextOverrideAuditId < 1) db.nextOverrideAuditId = 1;
+    if (!Array.isArray(db.overrideAuditLogs)) db.overrideAuditLogs = [];
     if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') db.specialPredictionConfig = defaultDb().specialPredictionConfig;
     if (typeof db.specialPredictionConfig.deadline_iso !== 'string' || !db.specialPredictionConfig.deadline_iso) db.specialPredictionConfig.deadline_iso = SPECIAL_PREDICTION_DEADLINE_ISO;
     if (typeof db.specialPredictionConfig.manually_locked !== 'boolean') db.specialPredictionConfig.manually_locked = false;
@@ -989,6 +999,86 @@ function calculateBetSettlement(match, bet) {
     return { status: 'won', payout: Math.floor(bet.stake * bet.odds) };
   }
   return { status: 'lost', payout: 0 };
+}
+
+function applySettlementForMatch(match, { adjustExistingPayouts = false } = {}) {
+  const matchBets = db.bets.filter((b) => b.match_id === match.id);
+  for (const bet of matchBets) {
+    const settled = calculateBetSettlement(match, bet);
+    if (!settled) {
+      return { error: 'Cần nhập tỷ số đầy đủ để chốt kèo chấp, tài/xỉu hoặc kèo tỷ số chính xác.' };
+    }
+    const user = db.users.find((u) => u.id === bet.user_id);
+    if (!user) continue;
+
+    if (adjustExistingPayouts) {
+      const oldPayout = Number.isFinite(Number(bet.payout)) ? Number(bet.payout) : 0;
+      const delta = settled.payout - oldPayout;
+      user.points += delta;
+    } else if (settled.payout > 0) {
+      user.points += settled.payout;
+    }
+
+    bet.status = settled.status;
+    bet.payout = settled.payout;
+  }
+  return { ok: true, settledBets: matchBets.length };
+}
+
+function buildOverrideSettlementPreview(match, nextOutcome) {
+  const previewMatch = {
+    ...match,
+    result: nextOutcome.result,
+    home_score: nextOutcome.homeScore,
+    away_score: nextOutcome.awayScore
+  };
+  const bets = db.bets.filter((b) => b.match_id === match.id);
+  const impactedUsers = new Set();
+  const rows = [];
+  let totalDelta = 0;
+  let statusChanges = 0;
+
+  for (const bet of bets) {
+    const settled = calculateBetSettlement(previewMatch, bet);
+    if (!settled) {
+      return { error: 'Cần nhập tỷ số đầy đủ để tính lại kèo chấp, tài/xỉu hoặc tỷ số chính xác.' };
+    }
+    const oldPayout = Number.isFinite(Number(bet.payout)) ? Number(bet.payout) : 0;
+    const oldStatus = bet.status || 'open';
+    const delta = settled.payout - oldPayout;
+    if (delta !== 0 || oldStatus !== settled.status) {
+      impactedUsers.add(bet.user_id);
+      if (oldStatus !== settled.status) statusChanges += 1;
+      totalDelta += delta;
+      rows.push({
+        bet_id: bet.id,
+        user_id: bet.user_id,
+        old_status: oldStatus,
+        new_status: settled.status,
+        old_payout: oldPayout,
+        new_payout: settled.payout,
+        delta
+      });
+    }
+  }
+
+  rows.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return {
+    ok: true,
+    affectedBets: rows.length,
+    affectedUsers: impactedUsers.size,
+    totalDelta,
+    statusChanges,
+    sample: rows.slice(0, 8)
+  };
+}
+
+function formatOverrideOutcomeLabel(result, homeScore, awayScore, teamA, teamB) {
+  const outcomeText = exportPickLabel({ team_a: teamA, team_b: teamB }, '1X2', result, null);
+  if (Number.isInteger(homeScore) && Number.isInteger(awayScore)) {
+    return `${outcomeText} (${homeScore}-${awayScore})`;
+  }
+  return outcomeText;
 }
 
 function sanitizeUser(user) {
@@ -2095,18 +2185,11 @@ app.post('/api/admin/settle', requirePermission('can_set_result'), (req, res) =>
     match.away_score = awayScore;
   }
 
-  const matchBets = db.bets.filter((b) => b.match_id === matchId);
-  for (const bet of matchBets) {
-    const settled = calculateBetSettlement(match, bet);
-    if (!settled) return res.status(400).json({ error: 'Cần nhập tỷ số đầy đủ để chốt kèo chấp hoặc kèo tỷ số.' });
-    const user = db.users.find((u) => u.id === bet.user_id);
-    if (user && settled.payout > 0) user.points += settled.payout;
-    bet.status = settled.status;
-    bet.payout = settled.payout;
-  }
+  const settledResult = applySettlementForMatch(match, { adjustExistingPayouts: false });
+  if (settledResult.error) return res.status(400).json({ error: settledResult.error });
 
   saveDb();
-  res.json({ ok: true, settledBets: matchBets.length });
+  res.json({ ok: true, settledBets: settledResult.settledBets });
 });
 
 app.post('/api/admin/recalculate-match/:id', requireAdmin, (req, res) => {
@@ -2139,6 +2222,54 @@ app.post('/api/admin/recalculate-match/:id', requireAdmin, (req, res) => {
 
   saveDb();
   res.json({ ok: true, matchId, adjustedBets: bets.length, adjustedUsers, totalDelta });
+});
+
+app.post('/api/admin/settle-override-preview', requireAdmin, (req, res) => {
+  const matchId = Number(req.body.matchId);
+  const resultRaw = String(req.body.result || '');
+  const homeScore = req.body.homeScore === undefined || req.body.homeScore === null || req.body.homeScore === ''
+    ? null
+    : Number(req.body.homeScore);
+  const awayScore = req.body.awayScore === undefined || req.body.awayScore === null || req.body.awayScore === ''
+    ? null
+    : Number(req.body.awayScore);
+  const resultFromScore = resolveResultFromScore(homeScore, awayScore);
+  const result = ['HOME', 'DRAW', 'AWAY'].includes(resultRaw) ? resultRaw : resultFromScore;
+
+  if (!Number.isInteger(matchId) || !['HOME', 'DRAW', 'AWAY'].includes(result)) {
+    return res.status(400).json({ error: 'Invalid payload.' });
+  }
+  if (homeScore !== null && (!Number.isInteger(homeScore) || homeScore < 0)) {
+    return res.status(400).json({ error: 'Invalid homeScore.' });
+  }
+  if (awayScore !== null && (!Number.isInteger(awayScore) || awayScore < 0)) {
+    return res.status(400).json({ error: 'Invalid awayScore.' });
+  }
+
+  const match = db.matches.find((m) => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (!match.result) return res.status(400).json({ error: 'Match chưa chốt kết quả nên không cần tính lại.' });
+
+  const preview = buildOverrideSettlementPreview(match, { result, homeScore, awayScore });
+  if (preview.error) return res.status(400).json({ error: preview.error });
+
+  res.json({
+    ok: true,
+    matchId,
+    before: {
+      result: match.result,
+      homeScore: match.home_score,
+      awayScore: match.away_score,
+      label: formatOverrideOutcomeLabel(match.result, match.home_score, match.away_score, match.team_a, match.team_b)
+    },
+    after: {
+      result,
+      homeScore,
+      awayScore,
+      label: formatOverrideOutcomeLabel(result, homeScore, awayScore, match.team_a, match.team_b)
+    },
+    ...preview
+  });
 });
 
 app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (req, res) => {
@@ -2229,6 +2360,83 @@ app.put('/api/admin/matches/:id/odds', requirePermission('can_manage_odds'), (re
   }
   saveDb();
   res.json({ ok: true });
+});
+
+app.post('/api/admin/settle-override', requireAdmin, (req, res) => {
+  const matchId = Number(req.body.matchId);
+  const resultRaw = String(req.body.result || '');
+  const homeScore = req.body.homeScore === undefined || req.body.homeScore === null || req.body.homeScore === ''
+    ? null
+    : Number(req.body.homeScore);
+  const awayScore = req.body.awayScore === undefined || req.body.awayScore === null || req.body.awayScore === ''
+    ? null
+    : Number(req.body.awayScore);
+  const resultFromScore = resolveResultFromScore(homeScore, awayScore);
+  const result = ['HOME', 'DRAW', 'AWAY'].includes(resultRaw) ? resultRaw : resultFromScore;
+
+  if (!Number.isInteger(matchId) || !['HOME', 'DRAW', 'AWAY'].includes(result)) {
+    return res.status(400).json({ error: 'Invalid payload.' });
+  }
+  if (homeScore !== null && (!Number.isInteger(homeScore) || homeScore < 0)) {
+    return res.status(400).json({ error: 'Invalid homeScore.' });
+  }
+  if (awayScore !== null && (!Number.isInteger(awayScore) || awayScore < 0)) {
+    return res.status(400).json({ error: 'Invalid awayScore.' });
+  }
+
+  const match = db.matches.find((m) => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found.' });
+  if (!match.result) return res.status(400).json({ error: 'Match chưa chốt kết quả nên không cần tính lại.' });
+  const adminUser = getSessionUserRecord(req);
+  const beforeResult = match.result;
+  const beforeHomeScore = match.home_score;
+  const beforeAwayScore = match.away_score;
+  const preview = buildOverrideSettlementPreview(match, { result, homeScore, awayScore });
+  if (preview.error) return res.status(400).json({ error: preview.error });
+
+  match.result = result;
+  if (homeScore !== null && awayScore !== null) {
+    match.home_score = homeScore;
+    match.away_score = awayScore;
+  } else {
+    match.home_score = null;
+    match.away_score = null;
+  }
+
+  const settledResult = applySettlementForMatch(match, { adjustExistingPayouts: true });
+  if (settledResult.error) return res.status(400).json({ error: settledResult.error });
+
+  db.overrideAuditLogs.push({
+    id: db.nextOverrideAuditId++,
+    match_id: match.id,
+    team_a: match.team_a,
+    team_b: match.team_b,
+    admin_user_id: adminUser?.id || null,
+    admin_username: adminUser?.username || 'unknown',
+    from_result: beforeResult,
+    from_home_score: beforeHomeScore,
+    from_away_score: beforeAwayScore,
+    to_result: match.result,
+    to_home_score: match.home_score,
+    to_away_score: match.away_score,
+    affected_bets: preview.affectedBets,
+    affected_users: preview.affectedUsers,
+    total_delta: preview.totalDelta,
+    status_changes: preview.statusChanges,
+    created_at: new Date().toISOString()
+  });
+
+  saveDb();
+  res.json({ ok: true, settledBets: settledResult.settledBets, matchId, result: match.result, homeScore: match.home_score, awayScore: match.away_score });
+});
+
+app.get('/api/admin/matches/:id/override-audit', requireAdmin, (req, res) => {
+  const matchId = Number(req.params.id);
+  if (!Number.isInteger(matchId)) return res.status(400).json({ error: 'Invalid match id.' });
+  const logs = db.overrideAuditLogs
+    .filter((entry) => entry.match_id === matchId)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  res.json({ ok: true, logs });
 });
 
 app.get('/api/admin/sync-status', requireAdmin, (req, res) => {

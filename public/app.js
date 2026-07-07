@@ -181,6 +181,24 @@ function syncNewMatchModeUI() {
   setVisible(document.getElementById('newOddsUnder'), isOverUnder);
   setVisible(document.getElementById('newScoreOdds'), isScore);
   setVisible(document.getElementById('newScoreTools'), isScore);
+  setVisible(document.getElementById('newOverUnderTooltip'), isOverUnder);
+
+  const overUnderTooltipContent = document.getElementById('newOverUnderTooltipContent');
+  if (overUnderTooltipContent) {
+    overUnderTooltipContent.innerHTML = isOverUnder
+      ? `
+        <strong>${tr('ouGuideTitle', {}, 'Hướng dẫn kèo tài/xỉu')}</strong>
+        <div class="small">${tr('ouGuideIntro', {}, 'Kèo tài/xỉu tính theo tổng số bàn của cả 2 đội sau 90 phút + bù giờ.')}</div>
+        <ul class="small">
+          <li>${tr('ouGuideExample25', {}, 'Mốc 2.5: Tài thắng khi có từ 3 bàn, Xỉu thắng khi có 0-2 bàn.')}</li>
+          <li>${tr('ouGuideExample225', {}, 'Mốc 2.25: Tài = nửa tiền ở 2.0 và nửa tiền ở 2.5. Nếu trận có đúng 2 bàn thì Tài thua nửa, Xỉu thắng nửa.')}</li>
+          <li>${tr('ouGuideExample275', {}, 'Mốc 2.75: Tài = nửa tiền ở 2.5 và nửa tiền ở 3.0. Nếu trận có đúng 3 bàn thì Tài thắng nửa, Xỉu thua nửa.')}</li>
+          <li>${tr('ouGuideExample3', {}, 'Mốc 3.0: đúng 3 bàn thì hoàn tiền cả Tài và Xỉu tùy cửa đã chọn.')}</li>
+          <li>${tr('ouGuideOdds', {}, 'Ví dụ nhập: mốc 2.25, Odds Tài 1.95, Odds Xỉu 1.95.')}</li>
+        </ul>
+      `
+      : '';
+  }
 
   const hintEl = document.getElementById('newBetModeHint');
   if (hintEl) {
@@ -1249,6 +1267,13 @@ async function renderAdminMatches() {
         <td>
           ${canSetResult ? `<button onclick="exportMatchSettlement(${m.id})">Export kết quả</button>` : ''}
           ${currentUser?.is_admin ? `<button onclick="recalculateMatch(${m.id})">Tính lại trả thưởng</button>` : ''}
+          ${currentUser?.is_admin ? `<button onclick="overrideSettlementResult(${m.id}, 'HOME')">Sửa về ${m.team_a}</button>` : ''}
+          ${currentUser?.is_admin ? `<button onclick="overrideSettlementResult(${m.id}, 'DRAW')">Sửa về Hòa</button>` : ''}
+          ${currentUser?.is_admin ? `<button onclick="overrideSettlementResult(${m.id}, 'AWAY')">Sửa về ${m.team_b}</button>` : ''}
+          ${currentUser?.is_admin ? `<input id="override-score-home-${m.id}" type="number" min="0" placeholder="${m.team_a}" style="width:75px" />` : ''}
+          ${currentUser?.is_admin ? `<input id="override-score-away-${m.id}" type="number" min="0" placeholder="${m.team_b}" style="width:75px" />` : ''}
+          ${currentUser?.is_admin ? `<button onclick="overrideSettlementByScore(${m.id})">Sửa theo tỷ số</button>` : ''}
+          ${currentUser?.is_admin ? `<button onclick="showOverrideAudit(${m.id})">Xem log sửa</button>` : ''}
         </td>
       </tr>
     `).join('');
@@ -2224,6 +2249,124 @@ window.settleByScore = function (matchId) {
       await Promise.all([refresh(), renderAdminMatches()]);
     }
   );
+};
+
+async function fetchOverridePreview(payload) {
+  return adminApi('/api/admin/settle-override-preview', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+function renderOverridePreviewHtml(matchLabelText, preview, extraLine) {
+  const deltaText = preview.totalDelta > 0 ? `+${preview.totalDelta}` : String(preview.totalDelta);
+  const sampleHtml = (preview.sample || []).length
+    ? `
+      <p><strong>Mẫu các cược bị ảnh hưởng:</strong></p>
+      <table>
+        <thead><tr><th>Bet</th><th>User</th><th>Trạng thái</th><th>Payout</th><th>Delta</th></tr></thead>
+        <tbody>
+          ${preview.sample.map((row) => `
+            <tr>
+              <td>#${row.bet_id}</td>
+              <td>#${row.user_id}</td>
+              <td>${row.old_status} -> ${row.new_status}</td>
+              <td>${row.old_payout} -> ${row.new_payout}</td>
+              <td>${row.delta > 0 ? '+' : ''}${row.delta}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+    : `<p>Không có thay đổi payout/trạng thái nào cho trận này.</p>`;
+
+  return `
+    <p>Bạn sắp <strong>tính lại trả thưởng</strong> cho trận <strong>${matchLabelText}</strong>.</p>
+    ${extraLine}
+    <p><strong>Từ:</strong> ${preview.before.label}</p>
+    <p><strong>Sang:</strong> ${preview.after.label}</p>
+    <p><strong>Ảnh hưởng:</strong> ${preview.affectedBets} cược / ${preview.affectedUsers} user / ${preview.statusChanges} cược đổi trạng thái</p>
+    <p><strong>Tổng chênh lệch điểm:</strong> ${deltaText}</p>
+    ${sampleHtml}
+    <p>Hệ thống sẽ tự trừ payout cũ và cộng payout mới của đúng trận này.</p>
+  `;
+}
+
+window.overrideSettlementResult = async function (matchId, result) {
+  const homeInput = document.getElementById(`override-score-home-${matchId}`);
+  const awayInput = document.getElementById(`override-score-away-${matchId}`);
+  const rowTeamA = homeInput?.placeholder || 'Đội A';
+  const rowTeamB = awayInput?.placeholder || 'Đội B';
+  const resultText = result === 'HOME' ? rowTeamA : (result === 'AWAY' ? rowTeamB : 'Hòa');
+  try {
+    const preview = await fetchOverridePreview({ matchId, result });
+    openAdminConfirm(
+      renderOverridePreviewHtml(
+        `${rowTeamA} vs ${rowTeamB}`,
+        preview,
+        `<p><strong>Kết quả mới:</strong> ${resultText}</p>`
+      ),
+      async () => {
+        await adminApi('/api/admin/settle-override', {
+          method: 'POST',
+          body: JSON.stringify({ matchId, result })
+        });
+        setMessage('Đã tính lại trả thưởng theo kết quả mới', 'success');
+        await Promise.all([refresh(), renderAdminMatches()]);
+      }
+    );
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.overrideSettlementByScore = async function (matchId) {
+  const homeEl = document.getElementById(`override-score-home-${matchId}`);
+  const awayEl = document.getElementById(`override-score-away-${matchId}`);
+  const homeScore = Number(homeEl.value);
+  const awayScore = Number(awayEl.value);
+  const teamA = homeEl?.placeholder || 'Đội A';
+  const teamB = awayEl?.placeholder || 'Đội B';
+  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeEl.value === '' || awayEl.value === '') {
+    setMessage('Vui lòng nhập đầy đủ tỷ số mới trước khi tính lại.', 'error');
+    return;
+  }
+  try {
+    const preview = await fetchOverridePreview({ matchId, homeScore, awayScore });
+    openAdminConfirm(
+      renderOverridePreviewHtml(
+        `${teamA} vs ${teamB}`,
+        preview,
+        `<p><strong>Tỷ số mới:</strong> ${homeScore} - ${awayScore}</p>`
+      ),
+      async () => {
+        await adminApi('/api/admin/settle-override', {
+          method: 'POST',
+          body: JSON.stringify({ matchId, homeScore, awayScore })
+        });
+        setMessage('Đã tính lại trả thưởng theo tỷ số mới', 'success');
+        await Promise.all([refresh(), renderAdminMatches()]);
+      }
+    );
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
+};
+
+window.showOverrideAudit = async function (matchId) {
+  try {
+    const data = await adminApi(`/api/admin/matches/${matchId}/override-audit`);
+    const lines = (data.logs || []).length
+      ? data.logs.map((log) => {
+          const fromScore = Number.isInteger(log.from_home_score) && Number.isInteger(log.from_away_score) ? ` (${log.from_home_score}-${log.from_away_score})` : '';
+          const toScore = Number.isInteger(log.to_home_score) && Number.isInteger(log.to_away_score) ? ` (${log.to_home_score}-${log.to_away_score})` : '';
+          return `[${fmtTime(log.created_at)}] ${log.admin_username}: ${log.from_result}${fromScore} -> ${log.to_result}${toScore} | ${log.affected_bets} cược | ${log.affected_users} user | delta ${log.total_delta > 0 ? '+' : ''}${log.total_delta}`;
+        }).join('\n')
+      : 'Trận này chưa có log sửa kết quả.';
+    window.alert(lines);
+  } catch (e) {
+    setMessage(e.message, 'error');
+  }
 };
 
 window.updateOdds = async function (matchId) {
