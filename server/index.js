@@ -52,6 +52,7 @@ function defaultDb() {
     nextBetId: 1,
     nextMatchId: 5,
     nextOverrideAuditId: 1,
+    nextSpecialPickHistoryId: 1,
     lastSyncAt: null,
     lastSyncError: null,
     specialMarkets: [
@@ -60,6 +61,7 @@ function defaultDb() {
       { key: 'wc_best_goalkeeper', title: 'Dự đoán thủ môn xuất sắc nhất World Cup', result: null, bonus_points: SPECIAL_BONUS_POINTS, lock_mode: 'default' }
     ],
     specialPicks: [],
+    specialPickHistory: [],
     specialPredictionConfig: {
       deadline_iso: SPECIAL_PREDICTION_DEADLINE_ISO,
       manually_locked: false
@@ -299,6 +301,9 @@ if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) {
 if (!Array.isArray(db.specialPicks)) {
   db.specialPicks = [];
 }
+if (!Array.isArray(db.specialPickHistory)) {
+  db.specialPickHistory = [];
+}
 if (!db.dailyBonus || typeof db.dailyBonus !== 'object') {
   db.dailyBonus = defaultDb().dailyBonus;
 }
@@ -316,6 +321,9 @@ if (!db.registration || typeof db.registration !== 'object') {
 }
 if (typeof db.registration.enabled !== 'boolean') {
   db.registration.enabled = true;
+}
+if (!Number.isInteger(db.nextSpecialPickHistoryId) || db.nextSpecialPickHistoryId < 1) {
+  db.nextSpecialPickHistoryId = 1;
 }
 if (!Number.isInteger(db.nextOverrideAuditId) || db.nextOverrideAuditId < 1) {
   db.nextOverrideAuditId = 1;
@@ -422,12 +430,14 @@ async function loadDbRemoteIfEnabled() {
     }
     if (!Array.isArray(db.specialMarkets) || db.specialMarkets.length === 0) db.specialMarkets = defaultDb().specialMarkets;
     if (!Array.isArray(db.specialPicks)) db.specialPicks = [];
+    if (!Array.isArray(db.specialPickHistory)) db.specialPickHistory = [];
     if (!db.dailyBonus || typeof db.dailyBonus !== 'object') db.dailyBonus = defaultDb().dailyBonus;
     if (!db.maintenance || typeof db.maintenance !== 'object') db.maintenance = defaultDb().maintenance;
     if (typeof db.maintenance.enabled !== 'boolean') db.maintenance.enabled = false;
     if (typeof db.maintenance.message !== 'string') db.maintenance.message = '';
     if (!db.registration || typeof db.registration !== 'object') db.registration = defaultDb().registration;
     if (typeof db.registration.enabled !== 'boolean') db.registration.enabled = true;
+    if (!Number.isInteger(db.nextSpecialPickHistoryId) || db.nextSpecialPickHistoryId < 1) db.nextSpecialPickHistoryId = 1;
     if (!Number.isInteger(db.nextOverrideAuditId) || db.nextOverrideAuditId < 1) db.nextOverrideAuditId = 1;
     if (!Array.isArray(db.overrideAuditLogs)) db.overrideAuditLogs = [];
     if (!db.specialPredictionConfig || typeof db.specialPredictionConfig !== 'object') db.specialPredictionConfig = defaultDb().specialPredictionConfig;
@@ -1081,6 +1091,17 @@ function formatOverrideOutcomeLabel(result, homeScore, awayScore, teamA, teamB) 
   return outcomeText;
 }
 
+function appendSpecialPickHistory({ userId, marketKey, prediction, action }) {
+  db.specialPickHistory.push({
+    id: db.nextSpecialPickHistoryId++,
+    user_id: userId,
+    market_key: marketKey,
+    prediction,
+    action: action || 'save',
+    created_at: new Date().toISOString()
+  });
+}
+
 function sanitizeUser(user) {
   return {
     id: user.id,
@@ -1329,10 +1350,19 @@ app.post('/api/specials/picks', requireAuth, (req, res) => {
 
   const existing = db.specialPicks.find((p) => p.user_id === req.session.user.id && p.market_key === marketKey);
   if (existing) {
+    const changed = existing.prediction !== prediction;
     existing.prediction = prediction;
     existing.status = 'open';
     existing.bonus = 0;
     existing.updated_at = new Date().toISOString();
+    if (changed) {
+      appendSpecialPickHistory({
+        userId: req.session.user.id,
+        marketKey,
+        prediction,
+        action: 'update'
+      });
+    }
   } else {
     db.specialPicks.push({
       id: `${req.session.user.id}_${marketKey}`,
@@ -1343,6 +1373,12 @@ app.post('/api/specials/picks', requireAuth, (req, res) => {
       bonus: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    });
+    appendSpecialPickHistory({
+      userId: req.session.user.id,
+      marketKey,
+      prediction,
+      action: 'create'
     });
   }
   saveDb();
@@ -1574,6 +1610,75 @@ app.get('/api/admin/specials', requireAdmin, (req, res) => {
     deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso),
     manually_locked: Boolean(db.specialPredictionConfig.manually_locked)
   });
+});
+
+app.get('/api/admin/specials/export-all', requireAdmin, (req, res) => {
+  const historyRows = [];
+  const currentUserById = new Map(db.users.map((u) => [u.id, u]));
+  const marketByKey = new Map(db.specialMarkets.map((m) => [m.key, m]));
+  const historyKeySet = new Set();
+
+  for (const entry of db.specialPickHistory) {
+    const user = currentUserById.get(entry.user_id);
+    const market = marketByKey.get(entry.market_key);
+    const key = `${entry.user_id}__${entry.market_key}__${entry.prediction}__${entry.created_at}`;
+    historyKeySet.add(key);
+    historyRows.push({
+      user_id: entry.user_id,
+      username: user?.username || '',
+      full_name: user?.full_name || '',
+      market_key: entry.market_key,
+      market_title: market?.title || entry.market_key,
+      prediction: entry.prediction,
+      action: entry.action || 'save',
+      recorded_at: entry.created_at,
+      source: 'history'
+    });
+  }
+
+  for (const pick of db.specialPicks) {
+    const key = `${pick.user_id}__${pick.market_key}__${pick.prediction}__${pick.updated_at || pick.created_at || ''}`;
+    if (historyKeySet.has(key)) continue;
+    const user = currentUserById.get(pick.user_id);
+    const market = marketByKey.get(pick.market_key);
+    historyRows.push({
+      user_id: pick.user_id,
+      username: user?.username || '',
+      full_name: user?.full_name || '',
+      market_key: pick.market_key,
+      market_title: market?.title || pick.market_key,
+      prediction: pick.prediction,
+      action: 'snapshot',
+      recorded_at: pick.updated_at || pick.created_at || '',
+      source: 'current_snapshot'
+    });
+  }
+
+  historyRows.sort((a, b) => {
+    const userCmp = a.username.localeCompare(b.username);
+    if (userCmp !== 0) return userCmp;
+    const marketCmp = a.market_title.localeCompare(b.market_title);
+    if (marketCmp !== 0) return marketCmp;
+    return new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime();
+  });
+
+  const csvRows = historyRows.map((row, idx) => ({
+    STT: idx + 1,
+    'User ID': row.user_id,
+    Username: row.username,
+    'Họ tên': row.full_name,
+    'Mã hạng mục': row.market_key,
+    'Hạng mục': row.market_title,
+    'Câu trả lời': row.prediction,
+    'Loại ghi nhận': row.action,
+    'Nguồn dữ liệu': row.source,
+    'Thời gian ghi nhận': row.recorded_at
+  }));
+
+  const csv = toCsv(csvRows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename=\"special-picks-all-users-${Date.now()}.csv\"`);
+  res.send('\ufeff' + csv);
 });
 
 app.post('/api/admin/specials/:key/lock-mode', requireAdmin, (req, res) => {

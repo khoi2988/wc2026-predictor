@@ -1395,7 +1395,13 @@ async function renderAdminSpecials() {
         </td>
       </tr>
     `).join('');
-    els.adminSpecials.innerHTML = `<table><thead><tr><th>Hạng mục</th><th>Số dự đoán</th><th>Kết quả</th><th>Mở/khóa riêng</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table>`;
+    els.adminSpecials.innerHTML = `
+      <div class="row" style="margin-bottom:12px">
+        <button onclick="exportAllSpecialAnswers()" class="alt">Export toàn bộ câu trả lời</button>
+        <div class="small">Xuất tất cả các lần trả lời của mọi user. Nếu user đổi đáp án nhiều lần thì file sẽ giữ đủ lịch sử.</div>
+      </div>
+      <table><thead><tr><th>Hạng mục</th><th>Số dự đoán</th><th>Kết quả</th><th>Mở/khóa riêng</th><th>Thao tác</th></tr></thead><tbody>${rows}</tbody></table>
+    `;
   } catch (e) {
     els.adminSpecialsStatus.textContent = '';
     els.adminSpecials.innerHTML = `<p class="small error">${e.message}</p>`;
@@ -2367,6 +2373,10 @@ window.showOverrideAudit = async function (matchId) {
   } catch (e) {
     setMessage(e.message, 'error');
   }
+};
+
+window.exportAllSpecialAnswers = function () {
+  window.open('/api/admin/specials/export-all', '_blank');
 };
 
 window.updateOdds = async function (matchId) {
