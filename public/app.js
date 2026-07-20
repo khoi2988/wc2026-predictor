@@ -78,6 +78,7 @@ const els = {
   adminUsers: document.getElementById('adminUsers'),
   adminSpecials: document.getElementById('adminSpecials'),
   adminSpecialsStatus: document.getElementById('adminSpecialsStatus'),
+  adminSeasonReport: document.getElementById('adminSeasonReport'),
   dailyBonusInfo: document.getElementById('dailyBonusInfo'),
   maintenanceInfo: document.getElementById('maintenanceInfo'),
   registrationInfo: document.getElementById('registrationInfo'),
@@ -291,6 +292,17 @@ function syncMaintenanceUI() {
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString(currentLocale());
+}
+
+function fmtInt(value) {
+  return Number(value || 0).toLocaleString(currentLocale(), { maximumFractionDigits: 0 });
+}
+
+function fmtDec(value, digits = 2) {
+  return Number(value || 0).toLocaleString(currentLocale(), {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits
+  });
 }
 
 function matchDayKey(iso) {
@@ -1142,7 +1154,7 @@ async function refresh() {
     document.getElementById('btnAdminLoad').classList.toggle('hidden', !(canManageOdds || canSetResult));
     document.getElementById('btnAdminLoadUsers').classList.toggle('hidden', !canExportUsers);
     if (user.is_admin) {
-      adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderRegistrationConfig(), renderAdminSpecials());
+      adminRenderTasks.push(renderDailyBonusConfig(), renderMaintenanceConfig(), renderRegistrationConfig(), renderAdminSpecials(), renderSeasonReport());
     }
   } else {
     els.adminPanel.classList.add('hidden');
@@ -1405,6 +1417,143 @@ async function renderAdminSpecials() {
   } catch (e) {
     els.adminSpecialsStatus.textContent = '';
     els.adminSpecials.innerHTML = `<p class="small error">${e.message}</p>`;
+  }
+}
+
+function renderSeasonSummaryCards(summary, highlights) {
+  const houseClass = Number(summary.house_net || 0) >= 0 ? 'positive' : 'negative';
+  return `
+    <div class="season-report-cards">
+      <div class="season-report-card">
+        <div class="season-report-label">Kết quả nhà cái</div>
+        <div class="season-report-value ${houseClass}">${fmtInt(summary.house_net)} điểm</div>
+        <div class="small">${escapeHtml(highlights.house_result || '')}</div>
+      </div>
+      <div class="season-report-card">
+        <div class="season-report-label">Tổng điểm cược đã vào</div>
+        <div class="season-report-value">${fmtInt(summary.turnover)} điểm</div>
+        <div class="small">${fmtInt(summary.settled_bets)} cược đã chốt</div>
+      </div>
+      <div class="season-report-card">
+        <div class="season-report-label">Trả ngược cho người chơi</div>
+        <div class="season-report-value">${fmtInt(summary.payout)} điểm</div>
+        <div class="small">Bao gồm mọi kèo đã settle</div>
+      </div>
+      <div class="season-report-card">
+        <div class="season-report-label">TB lời/lỗ mỗi ngày thi đấu</div>
+        <div class="season-report-value ${houseClass}">${fmtDec(summary.average_house_per_day)} điểm</div>
+        <div class="small">Nhóm theo ngày GMT+7</div>
+      </div>
+      <div class="season-report-card">
+        <div class="season-report-label">TB lời/lỗ mỗi trận</div>
+        <div class="season-report-value ${houseClass}">${fmtDec(summary.average_house_per_match)} điểm</div>
+        <div class="small">${fmtInt(summary.settled_matches)} trận đã chốt</div>
+      </div>
+      <div class="season-report-card">
+        <div class="season-report-label">Bonus dự đoán vui đã phát</div>
+        <div class="season-report-value">${fmtInt(summary.special_bonus_paid)} điểm</div>
+        <div class="small">${fmtInt(summary.participating_users)} người có tham gia</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSeasonMiniTable(title, columns, rows, emptyText = 'Chưa có dữ liệu') {
+  const headerHtml = columns.map((col) => `<th>${col.label}</th>`).join('');
+  const bodyHtml = rows.length
+    ? rows.map((row) => `<tr>${columns.map((col) => `<td>${col.render(row)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${columns.length}" class="small">${emptyText}</td></tr>`;
+  return `
+    <div class="season-report-block">
+      <h4>${title}</h4>
+      <table>
+        <thead><tr>${headerHtml}</tr></thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function renderSeasonReport() {
+  if (!els.adminSeasonReport) return;
+  try {
+    const data = await adminApi('/api/admin/season-report');
+    const summary = data.summary || {};
+    const highlights = data.highlights || {};
+    const biggestGainer = highlights.biggest_gainer;
+    const biggestLoser = highlights.biggest_loser;
+    const mostActive = highlights.most_active_player;
+    const biggestSingleWin = highlights.biggest_single_win;
+    const wildestMatch = highlights.wildest_match;
+
+    const highlightLines = [
+      biggestGainer ? `<li><strong>Bay cao nhất:</strong> ${escapeHtml(biggestGainer.username)} lời ${fmtInt(biggestGainer.total_net_with_specials)} điểm từ game.</li>` : '',
+      biggestLoser ? `<li><strong>Đóng học phí nhiều nhất:</strong> ${escapeHtml(biggestLoser.username)} âm ${fmtInt(Math.abs(biggestLoser.total_net_with_specials))} điểm.</li>` : '',
+      mostActive ? `<li><strong>Cày nhất mùa:</strong> ${escapeHtml(mostActive.username)} với ${fmtInt(mostActive.settled_bets)} cược đã chốt.</li>` : '',
+      biggestSingleWin ? `<li><strong>Vé nổ to nhất:</strong> ${escapeHtml(biggestSingleWin.username)} ăn ${fmtInt(biggestSingleWin.payout)} điểm ở trận ${escapeHtml(biggestSingleWin.match_title)}.</li>` : '',
+      wildestMatch ? `<li><strong>Trận drama nhất:</strong> ${escapeHtml(wildestMatch.title)} làm nhà cái ${Number(wildestMatch.house_net || 0) >= 0 ? 'lời' : 'lỗ'} ${fmtInt(Math.abs(wildestMatch.house_net || 0))} điểm.</li>` : ''
+    ].filter(Boolean).join('');
+
+    const topGainersTable = renderSeasonMiniTable(
+      'Top lãi từ game',
+      [
+        { label: '#', render: (row) => row.rank },
+        { label: 'User', render: (row) => escapeHtml(row.username) },
+        { label: 'Lãi/lỗ', render: (row) => `${fmtInt(row.total_net_with_specials)} điểm` },
+        { label: 'Điểm tổng hiện tại', render: (row) => fmtInt(row.current_points_total) }
+      ],
+      (data.top_gainers || []).map((row, index) => ({ ...row, rank: index + 1 }))
+    );
+
+    const topLosersTable = renderSeasonMiniTable(
+      'Top âm từ game',
+      [
+        { label: '#', render: (row) => row.rank },
+        { label: 'User', render: (row) => escapeHtml(row.username) },
+        { label: 'Lãi/lỗ', render: (row) => `${fmtInt(row.total_net_with_specials)} điểm` },
+        { label: 'Đã cược', render: (row) => fmtInt(row.total_stake) }
+      ],
+      (data.top_losers || []).map((row, index) => ({ ...row, rank: index + 1 }))
+    );
+
+    const byDayTable = renderSeasonMiniTable(
+      'Lời/lỗ theo ngày thi đấu',
+      [
+        { label: 'Ngày', render: (row) => escapeHtml(row.day_label) },
+        { label: 'Trận', render: (row) => fmtInt(row.matches) },
+        { label: 'Cược', render: (row) => fmtInt(row.bets) },
+        { label: 'Nhà cái +/-', render: (row) => `${fmtInt(row.house_net)} điểm` }
+      ],
+      data.settled_days || []
+    );
+
+    const craziestMatchesTable = renderSeasonMiniTable(
+      'Top trận nhiều biến động',
+      [
+        { label: 'Trận', render: (row) => escapeHtml(row.title) },
+        { label: 'Ngày', render: (row) => fmtTime(row.kickoff_at) },
+        { label: 'Cược', render: (row) => fmtInt(row.bets) },
+        { label: 'Nhà cái +/-', render: (row) => `${fmtInt(row.house_net)} điểm` }
+      ],
+      data.craziest_matches || []
+    );
+
+    els.adminSeasonReport.innerHTML = `
+      ${renderSeasonSummaryCards(summary, highlights)}
+      <div class="season-report-block season-report-story">
+        <h4>Tóm tắt vui</h4>
+        <ul>${highlightLines || '<li>Chưa có đủ dữ liệu để kể chuyện mùa giải.</li>'}</ul>
+        <div class="small">${escapeHtml(data.note || '')}</div>
+      </div>
+      <div class="season-report-grid">
+        ${topGainersTable}
+        ${topLosersTable}
+        ${byDayTable}
+        ${craziestMatchesTable}
+      </div>
+    `;
+  } catch (e) {
+    els.adminSeasonReport.innerHTML = `<p class="small error">${e.message}</p>`;
   }
 }
 

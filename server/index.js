@@ -546,6 +546,245 @@ function applyDailyBonusToAllUsers() {
   return changed;
 }
 
+function toLocalMatchDayKey(iso, offsetMinutes = APP_TZ_OFFSET_MINUTES) {
+  const dateObj = new Date(iso);
+  if (Number.isNaN(dateObj.getTime())) return '';
+  const parts = toOffsetDateParts(dateObj, offsetMinutes);
+  const month = String(parts.month + 1).padStart(2, '0');
+  const day = String(parts.day).padStart(2, '0');
+  return `${parts.year}-${month}-${day}`;
+}
+
+function formatLocalMatchDayLabel(dayKey) {
+  const [year, month, day] = String(dayKey || '').split('-');
+  if (!year || !month || !day) return dayKey || '';
+  return `${day}/${month}/${year}`;
+}
+
+function buildSeasonReport() {
+  applyDailyBonusToAllUsers();
+
+  const users = [...db.users];
+  const usersById = new Map(users.map((user) => [user.id, user]));
+  const matchesById = new Map(db.matches.map((match) => [match.id, match]));
+  const settledBets = db.bets.filter((bet) => bet.status && bet.status !== 'open' && bet.status !== 'cancelled');
+  const openBets = db.bets.filter((bet) => bet.status === 'open');
+  const settledMatches = db.matches.filter((match) => match.result);
+  const settledMatchIds = new Set(settledMatches.map((match) => match.id));
+  const specialBonusByUserId = new Map();
+
+  for (const pick of db.specialPicks) {
+    const bonus = Number.isFinite(Number(pick.bonus)) ? Number(pick.bonus) : 0;
+    if (bonus <= 0) continue;
+    specialBonusByUserId.set(pick.user_id, (specialBonusByUserId.get(pick.user_id) || 0) + bonus);
+  }
+
+  const userStatsById = new Map();
+  for (const user of users) {
+    const openStake = openBets
+      .filter((bet) => bet.user_id === user.id)
+      .reduce((sum, bet) => sum + bet.stake, 0);
+    userStatsById.set(user.id, {
+      user_id: user.id,
+      username: user.username,
+      full_name: user.full_name || '',
+      is_disabled: Boolean(user.is_disabled),
+      settled_bets: 0,
+      open_bets: 0,
+      total_stake: 0,
+      total_payout: 0,
+      betting_net: 0,
+      special_bonus: specialBonusByUserId.get(user.id) || 0,
+      current_points_available: user.points,
+      current_points_on_bet: openStake,
+      current_points_total: user.points + openStake,
+      average_odds: 0,
+      biggest_win_payout: 0
+    });
+  }
+
+  let turnover = 0;
+  let totalPayout = 0;
+  let totalOdds = 0;
+  let settledOddsCount = 0;
+  const dayAgg = new Map();
+  const matchAgg = new Map();
+
+  for (const bet of settledBets) {
+    const stake = Number.isFinite(Number(bet.stake)) ? Number(bet.stake) : 0;
+    const payout = Number.isFinite(Number(bet.payout)) ? Number(bet.payout) : 0;
+    const odds = Number.isFinite(Number(bet.odds)) ? Number(bet.odds) : 0;
+    turnover += stake;
+    totalPayout += payout;
+    if (odds > 0) {
+      totalOdds += odds;
+      settledOddsCount += 1;
+    }
+
+    const userStats = userStatsById.get(bet.user_id);
+    if (userStats) {
+      userStats.settled_bets += 1;
+      userStats.total_stake += stake;
+      userStats.total_payout += payout;
+      userStats.betting_net += payout - stake;
+      userStats.biggest_win_payout = Math.max(userStats.biggest_win_payout, payout);
+      if (odds > 0) {
+        userStats.average_odds += odds;
+      }
+    }
+
+    const match = matchesById.get(bet.match_id);
+    if (match) {
+      const dayKey = toLocalMatchDayKey(match.kickoff_at);
+      if (!dayAgg.has(dayKey)) {
+        dayAgg.set(dayKey, {
+          day_key: dayKey,
+          day_label: formatLocalMatchDayLabel(dayKey),
+          match_ids: new Set(),
+          bets: 0,
+          turnover: 0,
+          payout: 0
+        });
+      }
+      const dayStat = dayAgg.get(dayKey);
+      dayStat.match_ids.add(match.id);
+      dayStat.bets += 1;
+      dayStat.turnover += stake;
+      dayStat.payout += payout;
+
+      if (!matchAgg.has(match.id)) {
+        matchAgg.set(match.id, {
+          match_id: match.id,
+          title: `${match.team_a} vs ${match.team_b}`,
+          kickoff_at: match.kickoff_at,
+          day_key: dayKey,
+          bets: 0,
+          turnover: 0,
+          payout: 0
+        });
+      }
+      const matchStat = matchAgg.get(match.id);
+      matchStat.bets += 1;
+      matchStat.turnover += stake;
+      matchStat.payout += payout;
+    }
+  }
+
+  for (const bet of openBets) {
+    const userStats = userStatsById.get(bet.user_id);
+    if (userStats) {
+      userStats.open_bets += 1;
+    }
+  }
+
+  const playerRows = [...userStatsById.values()]
+    .map((row) => ({
+      ...row,
+      average_odds: row.settled_bets > 0 ? Number((row.average_odds / row.settled_bets).toFixed(2)) : 0,
+      total_net_with_specials: row.betting_net + row.special_bonus
+    }))
+    .filter((row) => !row.is_disabled || row.settled_bets > 0 || row.open_bets > 0 || row.special_bonus > 0);
+
+  const houseNet = turnover - totalPayout;
+  const settledDays = [...dayAgg.values()]
+    .map((row) => ({
+      day_key: row.day_key,
+      day_label: row.day_label,
+      matches: row.match_ids.size,
+      bets: row.bets,
+      turnover: row.turnover,
+      payout: row.payout,
+      house_net: row.turnover - row.payout
+    }))
+    .sort((a, b) => a.day_key.localeCompare(b.day_key));
+
+  const settledMatchesReport = [...matchAgg.values()]
+    .map((row) => ({
+      ...row,
+      house_net: row.turnover - row.payout
+    }))
+    .sort((a, b) => new Date(a.kickoff_at) - new Date(b.kickoff_at));
+
+  const topGainers = [...playerRows]
+    .sort((a, b) => (b.total_net_with_specials - a.total_net_with_specials) || b.current_points_total - a.current_points_total || a.username.localeCompare(b.username))
+    .slice(0, 5);
+  const topLosers = [...playerRows]
+    .sort((a, b) => (a.total_net_with_specials - b.total_net_with_specials) || a.current_points_total - b.current_points_total || a.username.localeCompare(b.username))
+    .slice(0, 5);
+  const mostActive = [...playerRows]
+    .sort((a, b) => (b.settled_bets - a.settled_bets) || (b.total_stake - a.total_stake) || a.username.localeCompare(b.username))
+    .slice(0, 5);
+  const biggestSingleWins = settledBets
+    .filter((bet) => Number(bet.payout) > 0)
+    .map((bet) => {
+      const match = matchesById.get(bet.match_id);
+      const user = usersById.get(bet.user_id);
+      return {
+        bet_id: bet.id,
+        username: user?.username || '',
+        full_name: user?.full_name || '',
+        match_title: match ? `${match.team_a} vs ${match.team_b}` : `Match #${bet.match_id}`,
+        payout: Number(bet.payout) || 0,
+        stake: Number(bet.stake) || 0,
+        odds: Number(bet.odds) || 0,
+        market: bet.market || '1X2',
+        pick: exportPickLabel(match, bet.market, bet.pick, bet.total_line ?? bet.handicap_line)
+      };
+    })
+    .sort((a, b) => (b.payout - a.payout) || (b.odds - a.odds) || a.username.localeCompare(b.username))
+    .slice(0, 5);
+
+  const craziestMatches = [...settledMatchesReport]
+    .sort((a, b) => Math.abs(b.house_net) - Math.abs(a.house_net))
+    .slice(0, 5);
+
+  const activeUsers = users.filter((user) => !user.is_disabled).length;
+  const participatingUsers = playerRows.length;
+  const averageHousePerMatch = settledMatchIds.size ? houseNet / settledMatchIds.size : 0;
+  const averageHousePerDay = settledDays.length ? houseNet / settledDays.length : 0;
+  const averageStakePerBet = settledBets.length ? turnover / settledBets.length : 0;
+
+  return {
+    generated_at: new Date().toISOString(),
+    timezone: 'GMT+7',
+    note: 'Mục "theo vòng" đang được nhóm theo ngày thi đấu GMT+7 vì hệ thống chưa lưu round chính thức.',
+    summary: {
+      total_users: users.length,
+      active_users: activeUsers,
+      participating_users: participatingUsers,
+      settled_matches: settledMatchIds.size,
+      settled_match_records: settledMatches.length,
+      settled_bets: settledBets.length,
+      open_bets: openBets.length,
+      turnover,
+      payout: totalPayout,
+      house_net: houseNet,
+      average_house_per_match: averageHousePerMatch,
+      average_house_per_day: averageHousePerDay,
+      average_stake_per_bet: averageStakePerBet,
+      average_odds: settledOddsCount ? Number((totalOdds / settledOddsCount).toFixed(2)) : 0,
+      special_bonus_paid: [...specialBonusByUserId.values()].reduce((sum, value) => sum + value, 0)
+    },
+    highlights: {
+      house_result: houseNet >= 0 ? 'Nhà cái có lãi' : 'Người chơi thắng nhà cái',
+      biggest_gainer: topGainers[0] || null,
+      biggest_loser: topLosers[0] || null,
+      most_active_player: mostActive[0] || null,
+      biggest_single_win: biggestSingleWins[0] || null,
+      wildest_match: craziestMatches[0] || null
+    },
+    top_gainers: topGainers,
+    top_losers: topLosers,
+    most_active_players: mostActive,
+    biggest_single_wins: biggestSingleWins,
+    settled_days: settledDays,
+    settled_matches: settledMatchesReport,
+    craziest_matches: craziestMatches,
+    player_rows: playerRows
+      .sort((a, b) => (b.current_points_total - a.current_points_total) || (b.total_net_with_specials - a.total_net_with_specials) || a.username.localeCompare(b.username))
+  };
+}
+
 function normalizeAllMatchTeamNames() {
   let changed = 0;
   for (const match of db.matches) {
@@ -1620,6 +1859,11 @@ app.get('/api/admin/specials', requireAdmin, (req, res) => {
     deadline_text: formatSpecialPredictionDeadlineText(db.specialPredictionConfig.deadline_iso),
     manually_locked: Boolean(db.specialPredictionConfig.manually_locked)
   });
+});
+
+app.get('/api/admin/season-report', requireAdmin, (req, res) => {
+  const report = buildSeasonReport();
+  res.json(report);
 });
 
 app.get('/api/admin/specials/export-all', requireAdmin, (req, res) => {

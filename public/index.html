@@ -153,6 +153,10 @@
             <option value="OVER_UNDER">Thể thức tài/xỉu</option>
             <option value="SCORE">Thể thức tỷ số chính xác</option>
           </select>
+          <div id="newOverUnderTooltip" class="tooltip-wrap hidden">
+            <button type="button" class="tooltip-trigger" aria-label="Hướng dẫn kèo tài xỉu">?</button>
+            <div class="tooltip-panel" id="newOverUnderTooltipContent"></div>
+          </div>
           <input id="newOddsHome" type="number" step="0.01" placeholder="Odds 1" />
           <input id="newOddsDraw" type="number" step="0.01" placeholder="Odds X" />
           <input id="newOddsAway" type="number" step="0.01" placeholder="Odds 2" />
@@ -196,6 +200,8 @@
             <button id="btnSaveSpecialConfig" class="alt">Lưu hạn dự đoán vui</button>
           </div>
           <div id="adminSpecials"></div>
+          <h3 id="adminSeasonReportTitle">Report tổng kết mùa giải</h3>
+          <div id="adminSeasonReport"></div>
           <h3 id="adminUsersTitle">Quản lý điểm người chơi</h3>
           <div class="row">
             <input id="bulkPointsDelta" type="number" step="1" value="100" style="width:140px" placeholder="Điểm cộng/trừ" />
