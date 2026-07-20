@@ -1091,6 +1091,16 @@ function formatOverrideOutcomeLabel(result, homeScore, awayScore, teamA, teamB) 
   return outcomeText;
 }
 
+function toCsv(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const header = Object.keys(rows[0]);
+  const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  return [
+    header.join(','),
+    ...rows.map((row) => header.map((key) => escapeCsv(row[key])).join(','))
+  ].join('\n');
+}
+
 function appendSpecialPickHistory({ userId, marketKey, prediction, action }) {
   db.specialPickHistory.push({
     id: db.nextSpecialPickHistoryId++,
